@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Orders - FitCart{% endblock %}
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md">
+    <h2 class="text-2xl font-bold mb-4">Orders</h2>
+    <table class="w-full border-collapse">
+        <thead>
+            <tr class="bg-gray-200">
+                <th class="p-2 text-left">Order ID</th>
+                <th class="p-2 text-left">Customer</th>
+                <th class="p-2 text-left">Product</th>
+                <th class="p-2 text-left">Status</th>
+                <th class="p-2 text-left">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+                <tr class="border-b">
+                    <td class="p-2">{{ order.id }}</td>
+                    <td class="p-2">{{ order.customer_name }}</td>
+                    <td class="p-2">{{ order.product.name }}</td>
+                    <td class="p-2">{{ order.status }}</td>
+                    <td class="p-2">
+                        <a href="{% url 'update_order_status' order.pk %}" class="text-blue-600 hover:underline">Update Status</a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5" class="p-2 text-center">No orders yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

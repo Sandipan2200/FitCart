@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block title %}Register as Customer{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <h2 class="text-2xl font-bold mb-6 text-center">Register as Customer</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Registration Form -->
+            <div class="bg-white p-8 rounded-lg shadow-md">
+                <form method="post" class="space-y-4">
+                    {% csrf_token %}
+                    
+                    <!-- Username Field -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700" for="{{ form.username.id_for_label }}">
+                            Username
+                        </label>
+                        {{ form.username }}
+                        {% if form.username.errors %}
+                            <div class="text-red-500 text-sm">{{ form.username.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Password Fields -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700" for="{{ form.password1.id_for_label }}">
+                            Password
+                        </label>
+                        {{ form.password1 }}
+                        {% if form.password1.help_text %}
+                            <p class="text-sm text-gray-500">{{ form.password1.help_text|safe }}</p>
+                        {% endif %}
+                        {% if form.password1.errors %}
+                            <div class="text-red-500 text-sm">{{ form.password1.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700" for="{{ form.password2.id_for_label }}">
+                            Confirm Password
+                        </label>
+                        {{ form.password2 }}
+                        {% if form.password2.errors %}
+                            <div class="text-red-500 text-sm">{{ form.password2.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Contact Information -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700" for="{{ form.phone.id_for_label }}">
+                            Phone Number
+                        </label>
+                        {{ form.phone }}
+                        {% if form.phone.errors %}
+                            <div class="text-red-500 text-sm">{{ form.phone.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700" for="{{ form.address.id_for_label }}">
+                            Address
+                        </label>
+                        {{ form.address }}
+                        {% if form.address.errors %}
+                            <div class="text-red-500 text-sm">{{ form.address.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Hidden Location Fields -->
+                    <div class="hidden">
+                        {{ form.latitude }}
+                        {{ form.longitude }}
+                    </div>
+
+                    <div class="mt-6">
+                        <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                            Register
+                        </button>
+                    </div>
+                </form>
+
+                <div class="mt-6 text-center">
+                    <p class="text-gray-600">Already have an account? 
+                        <a href="{% url 'login' %}" class="text-blue-600 hover:underline">Login here</a>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Map Section -->
+            <div class="bg-white p-8 rounded-lg shadow-md">
+                <h3 class="text-lg font-semibold mb-4">Select Your Location</h3>
+                <div id="map" class="w-full h-[400px] rounded-lg"></div>
+                <p class="mt-2 text-sm text-gray-600">Drag the marker to set your exact location</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Google Maps JavaScript for location picking -->
+<script>
+function initMap() {
+    const map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 13,
+        center: { lat: -34.397, lng: 150.644 }
+    });
+
+    const marker = new google.maps.Marker({
+        map: map,
+        draggable: true
+    });
+
+    // Try HTML5 geolocation
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const pos = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                };
+                map.setCenter(pos);
+                marker.setPosition(pos);
+                document.getElementById('id_latitude').value = pos.lat;
+                document.getElementById('id_longitude').value = pos.lng;
+            },
+            () => {
+                handleLocationError(true, map.getCenter());
+            }
+        );
+    } else {
+        handleLocationError(false, map.getCenter());
+    }
+
+    marker.addListener('dragend', () => {
+        const pos = marker.getPosition();
+        document.getElementById('id_latitude').value = pos.lat();
+        document.getElementById('id_longitude').value = pos.lng();
+    });
+}
+
+function handleLocationError(browserHasGeolocation, pos) {
+    console.log(browserHasGeolocation ?
+        'Error: The Geolocation service failed.' :
+        'Error: Your browser doesn\'t support geolocation.');
+}
+</script>
+<script async defer
+    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&callback=initMap">
+</script>
+{% endblock %}

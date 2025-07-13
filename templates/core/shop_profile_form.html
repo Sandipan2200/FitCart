@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h2 class="text-2xl font-bold mb-6">Edit Shop Profile</h2>
+    <form method="post" enctype="multipart/form-data" class="max-w-lg">
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="{{ field.id_for_label }}">
+                {{ field.label }}
+            </label>
+            {{ field }}
+            {% if field.help_text %}
+            <p class="text-gray-600 text-xs italic">{{ field.help_text }}</p>
+            {% endif %}
+            {% if field.errors %}
+            <div class="text-red-500 text-sm mt-1">
+                {{ field.errors }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <div class="flex items-center justify-between">
+            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">
+                Save Changes
+            </button>
+            <a href="{% url 'shopkeeper_dashboard' %}" class="text-gray-600 hover:text-gray-800">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Shopkeeper Profile Section -->
+        <div class="md:col-span-1">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <div class="text-center">
+                    {% if shopkeeper.shop_image %}
+                        <img src="{{ shopkeeper.shop_image.url }}" alt="Shop Image" 
+                             class="w-full h-48 object-cover rounded-lg mb-4">
+                    {% else %}
+                        <div class="w-full h-48 bg-gray-200 rounded-lg mb-4 flex items-center justify-center">
+                            <span class="text-gray-500">No shop image</span>
+                        </div>
+                    {% endif %}
+                    
+                    {% if shopkeeper.logo %}
+                        <img src="{{ shopkeeper.logo.url }}" alt="Shop Logo" 
+                             class="w-24 h-24 rounded-full mx-auto -mt-12 border-4 border-white shadow-lg">
+                    {% endif %}
+                    
+                    <h2 class="text-2xl font-semibold mt-4">{{ shopkeeper.shop_name }}</h2>
+                    <p class="text-gray-600">{{ shopkeeper.shop_description|default:"No description" }}</p>
+                </div>
+                
+                <div class="mt-6 space-y-2">
+                    <a href="{% url 'edit_shop_profile' %}" class="block w-full text-center py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        Edit Shop Profile
+                    </a>
+                    <a href="{% url 'change_password' %}" class="block w-full text-center py-2 px-4 border border-blue-600 text-blue-600 rounded hover:bg-blue-50">
+                        Change Password
+                    </a>
+                </div>
+            </div>
+
+            <!-- Shop Details -->
+            <div class="bg-white p-6 rounded-lg shadow-md mt-6">
+                <h3 class="font-semibold text-lg mb-4">Shop Details</h3>
+                <div class="space-y-3">
+                    <div>
+                        <p class="text-sm text-gray-600">Address</p>
+                        <p>{{ shopkeeper.address }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">Contact</p>
+                        <p>{{ shopkeeper.phone_number }}</p>
+                        <p>{{ user.email }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">Business Hours</p>
+                        <p>{{ shopkeeper.business_hours|default:"Not specified" }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Products and Orders Section -->
+        <div class="md:col-span-2">
+            <!-- Products Management -->
+            <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold">Products</h3>
+                    <a href="{% url 'add_product' %}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                        Add New Product
+                    </a>
+                </div>
+                {% if products %}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {% for product in products %}
+                        <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div class="flex space-x-4">
+                                {% if product.image %}
+                                    <img src="{{ product.image.url }}" alt="{{ product.name }}" 
+                                         class="w-24 h-24 object-cover rounded">
+                                {% endif %}
+                                <div class="flex-1">
+                                    <h4 class="font-medium">{{ product.name }}</h4>
+                                    <p class="text-sm text-gray-600">${{ product.price }}</p>
+                                    <p class="text-sm {% if product.stock > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                        Stock: {{ product.stock }}
+                                    </p>
+                                    <div class="mt-2 space-x-2">
+                                        <a href="{% url 'edit_product' product.id %}" 
+                                           class="text-blue-600 hover:underline text-sm">Edit</a>
+                                        <a href="{% url 'delete_product' product.id %}" 
+                                           class="text-red-600 hover:underline text-sm">Delete</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-gray-600">No products added yet.</p>
+                {% endif %}
+            </div>
+
+            <!-- Recent Orders -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-semibold mb-4">Recent Orders</h3>
+                {% if orders %}
+                    <div class="space-y-4">
+                        {% for order in orders %}
+                        <div class="border-b pb-4">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="font-medium">Order #{{ order.id }}</p>
+                                    <p class="text-sm text-gray-600">{{ order.created_at|date:"M d, Y" }}</p>
+                                    <p class="text-sm text-gray-600">Customer: {{ order.customer.user.username }}</p>
+                                    <p class="mt-1">Total: ${{ order.total }}</p>
+                                </div>
+                                <form method="post" action="{% url 'update_order_status' order.id %}" class="flex items-center space-x-2">
+                                    {% csrf_token %}
+                                    <select name="status" class="border rounded px-2 py-1 text-sm">
+                                        <option value="pending" {% if order.status == 'pending' %}selected{% endif %}>Pending</option>
+                                        <option value="confirmed" {% if order.status == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                                        <option value="delivered" {% if order.status == 'delivered' %}selected{% endif %}>Delivered</option>
+                                        <option value="cancelled" {% if order.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                                    </select>
+                                    <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">
+                                        Update
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-gray-600">No orders yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+{% block title %}FitCart - Find Local Shops{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Welcome Section -->
+    <div class="bg-white p-6 rounded-lg shadow-md text-center mb-8">
+        <h1 class="text-3xl font-bold mb-4">Welcome to FitCart</h1>
+        <p class="text-gray-600 mb-6">Find local shops near you, order products, and enjoy a healthy walk to pick up your items!</p>
+        
+        <!-- Search Form -->
+        <form method="get" action="{% url 'search_products' %}" class="max-w-lg mx-auto mb-6">
+            <div class="flex space-x-2">
+                <input type="text" name="q" class="w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="Search for products..." required>
+                <button type="submit" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Search</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Shops List -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-4">Nearby Shops</h2>
+            {% if shops %}
+                <div class="space-y-4">
+                    {% for shop in shops %}
+                        <div class="border p-4 rounded-lg hover:bg-gray-50 transition-colors">
+                            <h3 class="text-xl font-semibold">{{ shop.shop_name }}</h3>
+                            <p class="text-gray-600">{{ shop.address }}</p>
+                            {% if user_location %}
+                                <p class="text-sm text-blue-600">
+                                    Distance: {{ shop.distance|default:"Calculating..." }} km
+                                </p>
+                            {% endif %}
+                            <a href="{% url 'shop_detail' shop.id %}" class="mt-2 inline-block text-blue-600 hover:underline">
+                                View Products →
+                            </a>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-gray-600">No shops available in your area yet.</p>
+            {% endif %}
+        </div>
+
+        <!-- Map -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-4">Shops Map</h2>
+            <div id="map" class="w-full h-96 rounded-lg"></div>
+        </div>
+    </div>
+
+    <!-- Call to Action -->
+    <div class="mt-8 text-center">
+        {% if not user.is_authenticated %}
+            <p class="text-gray-600 mb-4">Are you a shopkeeper? Join FitCart to reach more customers!</p>
+            <div class="space-x-4">
+                <a href="{% url 'register_shopkeeper' %}" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Register as Shopkeeper</a>
+                <a href="{% url 'register_customer' %}" class="bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700">Register as Customer</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Google Maps Script -->
+<script>
+function showLoadingIndicator() {
+    document.getElementById('map').innerHTML = 
+        '<div class="flex items-center justify-center h-full bg-gray-50">' +
+        '<div class="text-center">' +
+        '<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>' +
+        '<p class="text-gray-600">Loading map...</p>' +
+        '</div></div>';
+}
+
+function showError(message) {
+    document.getElementById('map').innerHTML = 
+        '<div class="p-4 text-red-600 bg-red-100 rounded-lg">' + message + '</div>';
+}
+
+function checkGoogleMapsAPIKey() {
+    const apiKey = '{{ GOOGLE_MAPS_API_KEY }}';
+    if (!apiKey) {
+        showError('Google Maps API key is not configured. Please contact the administrator.');
+        return false;
+    }
+    return true;
+}
+
+function initMap() {
+    if (!checkGoogleMapsAPIKey()) return;
+    
+    // Show loading indicator
+    showLoadingIndicator();
+    
+    try {
+        // Default to a central location if no user location
+        const defaultCenter = {{ user_location|default:"{lat: 20.5937, lng: 78.9629}"|safe }};
+        
+        const map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 13,
+            center: defaultCenter,
+            mapTypeControl: true,
+            streetViewControl: true,
+            fullscreenControl: true
+        });
+
+        // Create info window for shop details
+        const infoWindow = new google.maps.InfoWindow();
+
+        // Add markers for shops with click listeners
+        {% for shop in shops %}
+            const shopMarker = new google.maps.Marker({
+                position: { lat: {{ shop.latitude }}, lng: {{ shop.longitude }} },
+                map: map,
+                title: "{{ shop.shop_name }}",
+                animation: google.maps.Animation.DROP
+            });
+
+            // Add click listener to show shop info
+            shopMarker.addListener('click', () => {
+                const content = `
+                    <div class="p-2">
+                        <h3 class="font-bold">{{ shop.shop_name }}</h3>
+                        <p class="text-gray-600">{{ shop.address }}</p>
+                        <a href="{% url 'shop_detail' shop.id %}" class="text-blue-600 hover:underline">View Details →</a>
+                    </div>
+                `;
+                infoWindow.setContent(content);
+                infoWindow.open(map, shopMarker);
+            });
+        {% endfor %}
+
+        // Add marker for user location if available
+        {% if user_location %}
+            const userMarker = new google.maps.Marker({
+                position: {{ user_location|safe }},
+                map: map,
+                title: "Your Location",
+                icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                animation: google.maps.Animation.DROP
+            });
+
+            // Add circle to show approximate coverage area
+            new google.maps.Circle({
+                strokeColor: "#4299E1",
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: "#4299E1",
+                fillOpacity: 0.1,
+                map: map,
+                center: {{ user_location|safe }},
+                radius: 3000  // 3km radius
+            });
+        {% endif %}
+
+    } catch (error) {
+        console.error('Error initializing map:', error);
+        document.getElementById('map').innerHTML = 
+            '<div class="p-4 text-red-600 bg-red-100 rounded-lg">' +
+            'Error loading map. Please check your internet connection and try again.' +
+            '</div>';
+    }
+}
+</script>
+
+<!-- Error handling for script loading -->
+<script>
+function handleScriptError() {
+    document.getElementById('map').innerHTML = 
+        '<div class="p-4 text-red-600 bg-red-100 rounded-lg space-y-2">' +
+        '<p class="font-bold">Failed to load Google Maps</p>' +
+        '<p>Please check:</p>' +
+        '<ul class="list-disc pl-4">' +
+        '<li>Your internet connection is working</li>' +
+        '<li>The API key is properly configured</li>' +
+        '<li>You have enabled billing in Google Cloud Console</li>' +
+        '</ul>' +
+        '</div>';
+}
+
+// Add fallback error handler for the entire window
+window.gm_authFailure = function() {
+    document.getElementById('map').innerHTML = 
+        '<div class="p-4 text-red-600 bg-red-100 rounded-lg space-y-2">' +
+        '<p class="font-bold">Google Maps Authentication Failed</p>' +
+        '<p>Please verify:</p>' +
+        '<ol class="list-decimal pl-4">' +
+        '<li>API key is correctly configured in Django settings</li>' +
+        '<li>Maps JavaScript API is enabled in Google Cloud Console</li>' +
+        '<li>API key allows requests from: ' + window.location.origin + '</li>' +
+        '<li>Billing is enabled for your Google Cloud Project</li>' +
+        '</ol>' +
+        '<p class="mt-2 text-xs">Current domain: ' + window.location.origin + '</p>' +
+        '</div>';
+    console.error('Google Maps authentication failed. Domain:', window.location.origin);
+};
+</script>
+
+<!-- Debug Information -->
+{% if debug %}
+<div class="hidden">
+    <p>API Key Length: {{ GOOGLE_MAPS_API_KEY|length }} characters</p>
+    <p>Debug Mode: {{ debug }}</p>
+    <p>API Key First 10 chars: {{ GOOGLE_MAPS_API_KEY|slice:":10" }}...</p>
+</div>
+{% endif %}
+
+<script async defer
+    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places&callback=initMap"
+    onerror="handleScriptError()">
+</script>
+{% endblock %}

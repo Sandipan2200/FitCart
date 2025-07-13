@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">Shopping Cart</h1>
+    {% if cart_items %}
+        <div class="grid grid-cols-1 gap-6">
+            {% for item in cart_items %}
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        {% if item.product.image %}
+                            <img src="{{ item.product.image.url }}" alt="{{ item.product.name }}" class="w-24 h-24 object-cover rounded">
+                        {% endif %}
+                        <div>
+                            <h3 class="text-lg font-semibold">{{ item.product.name }}</h3>
+                            <p class="text-gray-600">Price: ${{ item.product.price }}</p>
+                            <p class="text-gray-600">Quantity: {{ item.quantity }}</p>
+                            <p class="text-gray-600">Subtotal: ${{ item.subtotal }}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <form method="post" action="{% url 'update_cart' item.product.id %}">
+                            {% csrf_token %}
+                            <input type="number" name="quantity" value="{{ item.quantity }}" min="1" max="{{ item.product.stock }}" 
+                                   class="w-16 px-2 py-1 border rounded">
+                            <button type="submit" class="text-blue-600 hover:text-blue-800">Update</button>
+                        </form>
+                        <form method="post" action="{% url 'remove_from_cart' item.product.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="text-red-600 hover:text-red-800">Remove</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            <div class="mt-8 bg-white p-6 rounded-lg shadow-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Cart Total: ${{ total }}</h2>
+                    <button id="showDirectionsBtn" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                        Show Directions to Shop
+                    </button>
+                </div>
+                <div id="map" class="w-full h-96 mt-4 hidden"></div>
+                <div id="directionsPanel" class="mt-4 hidden"></div>
+            </div>
+        </div>
+    {% else %}
+        <div class="text-center py-8">
+            <p class="text-xl text-gray-600">Your cart is empty</p>
+            <a href="{% url 'index' %}" class="mt-4 inline-block bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                Continue Shopping
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+{% if cart_items %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}"></script>
+<script>
+let map;
+let directionsService;
+let directionsRenderer;
+let userMarker;
+let watchId;
+let currentRoute;
+
+function initMap() {
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({
+        polylineOptions: {
+            strokeColor: '#2563EB', // Tailwind blue-600
+            strokeWeight: 5
+        },
+        suppressMarkers: true // We'll add custom markers
+    });
+    
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: { lat: {{ shop_location.lat }}, lng: {{ shop_location.lng }} },
+        styles: [
+            {
+                featureType: "poi",
+                elementType: "labels",
+                stylers: [{ visibility: "off" }]
+            }
+        ]
+    });
+    
+    // Create shop marker
+    const shopMarker = new google.maps.Marker({
+        position: { lat: {{ shop_location.lat }}, lng: {{ shop_location.lng }} },
+        map: map,
+        title: 'Shop Location',
+        icon: {
+            url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+        }
+    });
+    
+    directionsRenderer.setMap(map);
+    directionsRenderer.setPanel(document.getElementById('directionsPanel'));
+}
+
+function updateUserLocation(position) {
+    const userLatLng = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+    };
+    
+    // Update or create user marker
+    if (!userMarker) {
+        userMarker = new google.maps.Marker({
+            position: userLatLng,
+            map: map,
+            title: 'Your Location',
+            icon: {
+                url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+            }
+        });
+    } else {
+        userMarker.setPosition(userLatLng);
+    }
+    
+    // Update route if we have a destination
+    if (currentRoute) {
+        calculateAndDisplayRoute(userLatLng, currentRoute.destination);
+    }
+}
+
+function handleLocationError(error) {
+    console.error('Error getting location:', error);
+    let message = 'Error getting your location. ';
+    switch(error.code) {
+        case error.PERMISSION_DENIED:
+            message += 'Please enable location services.';
+            break;
+        case error.POSITION_UNAVAILABLE:
+            message += 'Location information unavailable.';
+            break;
+        case error.TIMEOUT:
+            message += 'Location request timed out.';
+            break;
+        default:
+            message += 'An unknown error occurred.';
+    }
+    alert(message);
+}
+
+function startTracking() {
+    if (navigator.geolocation) {
+        // Get initial position
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                updateUserLocation(position);
+                
+                // Start watching position
+                watchId = navigator.geolocation.watchPosition(
+                    updateUserLocation,
+                    handleLocationError,
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 30000,
+                        timeout: 27000
+                    }
+                );
+            },
+            handleLocationError
+        );
+    } else {
+        alert('Geolocation is not supported by your browser.');
+    }
+}
+
+function stopTracking() {
+    if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+    if (userMarker) {
+        userMarker.setMap(null);
+        userMarker = null;
+    }
+}
+
+document.getElementById('showDirectionsBtn').addEventListener('click', function() {
+    const btn = this;
+    const mapDiv = document.getElementById('map');
+    const directionsPanel = document.getElementById('directionsPanel');
+    
+    if (mapDiv.classList.contains('hidden')) {
+        // Show map and start tracking
+        mapDiv.classList.remove('hidden');
+        directionsPanel.classList.remove('hidden');
+        btn.textContent = 'Stop Navigation';
+        btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        btn.classList.add('bg-red-600', 'hover:bg-red-700');
+        
+        if (!map) {
+            initMap();
+        }
+        
+        startTracking();
+        
+        // Set destination
+        currentRoute = {
+            destination: {
+                lat: {{ shop_location.lat }},
+                lng: {{ shop_location.lng }}
+            }
+        };
+    } else {
+        // Hide map and stop tracking
+        mapDiv.classList.add('hidden');
+        directionsPanel.classList.add('hidden');
+        btn.textContent = 'Show Directions to Shop';
+        btn.classList.remove('bg-red-600', 'hover:bg-red-700');
+        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        
+        stopTracking();
+        currentRoute = null;
+    }
+});
+
+function calculateAndDisplayRoute(origin, destination) {
+    directionsService.route(
+        {
+            origin: origin,
+            destination: destination,
+            travelMode: google.maps.TravelMode.DRIVING,
+        },
+        function(response, status) {
+            if (status === 'OK') {
+                // Calculate distance and duration
+                const route = response.routes[0];
+                const leg = route.legs[0];
+                const distance = leg.distance.text;
+                const duration = leg.duration.text;
+                
+                // Update info panel
+                const infoPanel = document.getElementById('directionsPanel');
+                infoPanel.innerHTML = `
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <div class="font-semibold text-lg mb-2">Journey Details</div>
+                        <div class="text-gray-600">
+                            <p>Distance: ${distance}</p>
+                            <p>Estimated Time: ${duration}</p>
+                        </div>
+                        <div class="mt-4">
+                            <div class="font-medium">Turn by turn directions:</div>
+                            ${route.legs[0].steps.map((step, index) => `
+                                <div class="mt-2 pb-2 border-b border-gray-200">
+                                    <span class="font-medium text-blue-600">${index + 1}.</span>
+                                    ${step.instructions}
+                                    <div class="text-sm text-gray-500">${step.distance.text}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                
+                directionsRenderer.setDirections(response);
+            } else {
+                window.alert('Directions request failed due to ' + status);
+            }
+        }
+    );
+}
+</script>
+{% endif %}
+{% endblock %}

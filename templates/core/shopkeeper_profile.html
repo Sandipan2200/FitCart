@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Shopkeeper Profile - FitCart{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
+    <h2 class="text-2xl font-bold mb-4">Shopkeeper Profile</h2>
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div>
+            <label for="map" class="block text-gray-700 font-semibold mb-2">Set Shop Location</label>
+            <div id="map" class="w-full h-96 rounded-lg shadow"></div>
+        </div>
+        <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Save Profile</button>
+    </form>
+</div>
+
+<!-- Google Maps JavaScript -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&callback=initMap" async defer></script>
+<script>
+    let map;
+    let marker;
+
+    function initMap() {
+        // Initialize map centered at shopkeeper's current location or default
+        const shopLocation = {
+            lat: {{ shopkeeper.latitude|default:0 }},
+            lng: {{ shopkeeper.longitude|default:0 }}
+        };
+        map = new google.maps.Map(document.getElementById('map'), {
+            center: shopLocation,
+            zoom: 15
+        });
+
+        // Place marker at shopkeeper's current location
+        marker = new google.maps.Marker({
+            position: shopLocation,
+            map: map,
+            title: '{{ shopkeeper.shop_name }}',
+            draggable: true
+        });
+
+        // Update form fields when marker is dragged
+        marker.addListener('dragend', function(event) {
+            document.getElementById('id_latitude').value = event.latLng.lat().toFixed(6);
+            document.getElementById('id_longitude').value = event.latLng.lng().toFixed(6);
+        });
+
+        // Update marker position when map is clicked
+        map.addListener('click', function(event) {
+            marker.setPosition(event.latLng);
+            document.getElementById('id_latitude').value = event.latLng.lat().toFixed(6);
+            document.getElementById('id_longitude').value = event.latLng.lng().toFixed(6);
+        });
+    }
+</script>
+{% endblock %}

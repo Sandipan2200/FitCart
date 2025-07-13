@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Update Order Status - FitCart{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
+    <h2 class="text-2xl font-bold mb-4">Update Order #{{ order.id }}</h2>
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Update Status</button>
+    </form>
+</div>
+{% endblock %}

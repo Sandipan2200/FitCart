@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Customer Profile Section -->
+        <div class="md:col-span-1">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <div class="text-center">
+                    {% if customer.profile_picture %}
+                        <img src="{{ customer.profile_picture.url }}" alt="Profile Picture" 
+                             class="w-32 h-32 rounded-full mx-auto mb-4 object-cover">
+                    {% else %}
+                        <div class="w-32 h-32 rounded-full mx-auto mb-4 bg-gray-200 flex items-center justify-center">
+                            <span class="text-4xl text-gray-500">{{ user.username.0|upper }}</span>
+                        </div>
+                    {% endif %}
+                    <h2 class="text-xl font-semibold">{{ user.get_full_name|default:user.username }}</h2>
+                    <p class="text-gray-600">{{ user.email }}</p>
+                </div>
+                <div class="mt-6 space-y-2">
+                    <a href="{% url 'customer_profile' %}" class="block w-full text-center py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        Edit Profile
+                    </a>
+                    <a href="{% url 'change_password' %}" class="block w-full text-center py-2 px-4 border border-blue-600 text-blue-600 rounded hover:bg-blue-50">
+                        Change Password
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orders and Activity Section -->
+        <div class="md:col-span-2">
+            <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                <h3 class="text-xl font-semibold mb-4">Recent Orders</h3>
+                {% if orders %}
+                    <div class="space-y-4">
+                        {% for order in orders %}
+                        <div class="border-b pb-4">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="font-medium">Order #{{ order.id }}</p>
+                                    <p class="text-sm text-gray-600">{{ order.created_at|date:"M d, Y" }}</p>
+                                    <p class="text-sm text-gray-600">Shop: {{ order.shop.name }}</p>
+                                    <p class="mt-1">Total: ${{ order.total }}</p>
+                                </div>
+                                <span class="px-3 py-1 rounded-full text-sm 
+                                    {% if order.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                    {% elif order.status == 'confirmed' %}bg-blue-100 text-blue-800
+                                    {% elif order.status == 'delivered' %}bg-green-100 text-green-800
+                                    {% elif order.status == 'cancelled' %}bg-red-100 text-red-800{% endif %}">
+                                    {{ order.status|title }}
+                                </span>
+                            </div>
+                            <div class="mt-2">
+                                <a href="{% url 'order_detail' order.id %}" class="text-blue-600 hover:underline text-sm">
+                                    View Details →
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-gray-600">No orders yet.</p>
+                {% endif %}
+            </div>
+
+            <!-- Saved Shops Section -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-semibold mb-4">Favorite Shops</h3>
+                {% if favorite_shops %}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {% for shop in favorite_shops %}
+                        <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div class="flex items-center space-x-3">
+                                {% if shop.logo %}
+                                    <img src="{{ shop.logo.url }}" alt="{{ shop.name }}" class="w-12 h-12 rounded-full object-cover">
+                                {% endif %}
+                                <div>
+                                    <h4 class="font-medium">{{ shop.name }}</h4>
+                                    <p class="text-sm text-gray-600">{{ shop.city }}</p>
+                                </div>
+                            </div>
+                            <a href="{% url 'shop_detail' shop.id %}" class="mt-2 text-blue-600 hover:underline text-sm block">
+                                Visit Shop →
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-gray-600">No favorite shops yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
