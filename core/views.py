@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate, logout, update_session_auth_hash
 from django.contrib import messages
+from django.conf import settings
 from django.contrib.auth.forms import PasswordChangeForm
 from .forms import (
     ShopkeeperRegistrationForm, 
@@ -8,8 +9,10 @@ from .forms import (
     OrderStatusForm, 
     ShopkeeperProfileForm,
     CustomerRegistrationForm,
-    CustomerProfileForm
+    CustomerProfileForm,
+    ReviewForm
 )
+from .models import Shopkeeper, Product, Order, Customer, Review
 from .models import Shopkeeper, Product, Order, Customer
 from math import radians, sin, cos, sqrt, atan2
 from django.contrib.auth.decorators import login_required
@@ -33,6 +36,11 @@ def add_to_cart(request, product_id):
     if request.method == 'POST':
         product = get_object_or_404(Product, id=product_id)
         
+        # Check if product is in stock
+        if not product.is_available:
+            messages.error(request, f'Sorry, {product.name} is currently out of stock.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+        
         # Check if product belongs to the same shop
         current_shop_id = request.session.get('current_shop_id')
         if current_shop_id is None:
@@ -42,11 +50,68 @@ def add_to_cart(request, product_id):
             return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
         
         cart = request.session.get('cart', {})
-        cart[str(product_id)] = cart.get(str(product_id), 0) + 1
+        current_quantity = cart.get(str(product_id), 0)
+        requested_quantity = current_quantity + 1
+        
+        # Check if adding one more would exceed available stock
+        if requested_quantity > product.stock:
+            messages.error(request, f'Sorry, only {product.stock} item(s) available in stock.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+            
+        cart[str(product_id)] = requested_quantity
         request.session['cart'] = cart
         messages.success(request, f'{product.name} added to cart.')
         return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
     return redirect('index')
+
+def order_tracking(request):
+    try:
+        shopkeeper = Shopkeeper.objects.get(user=request.user)
+    except Shopkeeper.DoesNotExist:
+        messages.error(request, "Shopkeeper profile not found.")
+        return redirect('login')
+    
+    active_orders = Order.objects.filter(
+        product__shopkeeper=shopkeeper,
+        status__in=['Pending', 'On Way']
+    ).select_related('customer').order_by('-created_at')
+    
+    context = {
+        'shopkeeper': shopkeeper,
+        'active_orders': active_orders,
+        'google_maps_api_key': settings.GOOGLE_MAPS_API_KEY,
+        'shop': shopkeeper  # For map initialization
+    }
+    return render(request, 'core/shopkeeper_order_tracking.html', context)
+
+from django.http import JsonResponse
+
+def active_orders_location(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+        
+    try:
+        shopkeeper = Shopkeeper.objects.get(user=request.user)
+    except Shopkeeper.DoesNotExist:
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    
+    active_orders = Order.objects.filter(
+        product__shopkeeper=shopkeeper,
+        status__in=['Pending', 'On Way']
+    ).select_related('customer')
+    
+    orders_data = []
+    for order in active_orders:
+        orders_data.append({
+            'id': order.id,
+            'customer_name': order.customer_name,
+            'status': order.status,
+            'last_location_lat': order.last_location_lat,
+            'last_location_lng': order.last_location_lng,
+            'last_update_time': order.last_location_update.strftime('%Y-%m-%d %H:%M:%S') if order.last_location_update else None
+        })
+    
+    return JsonResponse(orders_data, safe=False)
 
 def view_cart(request):
     if not request.user.is_authenticated:
@@ -56,6 +121,16 @@ def view_cart(request):
     cart_items = []
     total = 0
     shop_location = None
+    customer_orders = None
+    
+    try:
+        customer = Customer.objects.get(user=request.user)
+        customer_orders = Order.objects.filter(
+            customer=customer,
+            status__in=['Pending', 'On Way']
+        ).first()
+    except Customer.DoesNotExist:
+        pass
     
     if cart:
         first_product_id = list(cart.keys())[0]
@@ -79,10 +154,111 @@ def view_cart(request):
         'cart_items': cart_items,
         'total': total,
         'google_maps_api_key': settings.GOOGLE_MAPS_API_KEY,
-        'shop_location': shop_location
+        'shop_location': shop_location,
+        'current_order': customer_orders
     }
     
     return render(request, 'core/cart.html', context)
+
+@login_required
+def place_order(request):
+    cart = request.session.get('cart', {})
+    if not cart:
+        messages.error(request, 'Your cart is empty')
+        return redirect('view_cart')
+    
+    try:
+        customer = Customer.objects.get(user=request.user)
+    except Customer.DoesNotExist:
+        messages.error(request, 'Customer profile not found')
+        return redirect('view_cart')
+    
+    if request.method == 'POST':
+        delivery_note = request.POST.get('delivery_note', '')
+        confirm = request.POST.get('confirm', False)
+        
+        if not confirm:
+            messages.error(request, 'Please confirm that you will pick up the order')
+            return redirect('place_order')
+        
+        # Create orders for each item in cart
+        try:
+            from django.db import transaction
+            
+            # Get first product to identify shop
+            first_product_id = list(cart.keys())[0]
+            first_product = Product.objects.get(id=first_product_id)
+            shopkeeper = first_product.shopkeeper
+
+            # Check stock availability for all products first
+            for product_id, quantity in cart.items():
+                product = Product.objects.get(id=product_id)
+                if product.stock < quantity:
+                    messages.error(request, f'Sorry, {product.name} has only {product.stock} items available.')
+                    return redirect('view_cart')
+
+            # Use transaction to ensure all operations succeed or none do
+            with transaction.atomic():
+                # Create the first order
+                first_quantity = cart[first_product_id]
+                order = Order.objects.create(
+                    customer=customer,
+                    customer_name=customer.user.get_full_name() or customer.user.username,
+                    product=first_product,
+                    quantity=first_quantity,
+                    status='Pending',
+                    delivery_note=delivery_note
+                )
+                
+                # Check if stock is low after order
+                if first_product.stock <= 3:
+                    messages.warning(request, f'Alert: {first_product.name} is running low on stock (Only {first_product.stock} left)')
+                
+                # Create additional orders if there are more items
+                for product_id, quantity in cart.items():
+                    if product_id != str(first_product.id):
+                        product = Product.objects.get(id=product_id)
+                        if product.shopkeeper == shopkeeper:
+                            Order.objects.create(
+                                customer=customer,
+                                customer_name=customer.user.get_full_name() or customer.user.username,
+                                product=product,
+                                quantity=quantity,
+                                status='Pending',
+                                delivery_note=delivery_note
+                            )
+                            
+                            # Check if stock is low after order
+                            if product.stock <= 3:
+                                messages.warning(request, f'Alert: {product.name} is running low on stock (Only {product.stock} left)')
+            
+            # Clear the cart
+            request.session['cart'] = {}
+            messages.success(request, 'Order placed successfully! You can now track your order status.')
+            return redirect('customer_dashboard')
+            
+        except Exception as e:
+            messages.error(request, f'Error placing order: {str(e)}')
+            return redirect('place_order')
+    
+    # For GET request, show order form
+    cart_items = []
+    total = 0
+    for product_id, quantity in cart.items():
+        product = Product.objects.get(id=product_id)
+        subtotal = product.price * quantity
+        total += subtotal
+        cart_items.append({
+            'product': product,
+            'quantity': quantity,
+            'subtotal': subtotal
+        })
+    
+    context = {
+        'cart_items': cart_items,
+        'total': total
+    }
+    return render(request, 'core/place_order.html', context)
 
 def update_cart(request, product_id):
     if request.method == 'POST':
@@ -204,6 +380,33 @@ def dashboard(request):
     return redirect('login')
 
 @login_required
+def order_detail(request, order_id):
+    # Get the order and make sure it belongs to the current user
+    order = get_object_or_404(Order, id=order_id)
+    
+    # Check if the user is either the customer or the shopkeeper
+    try:
+        customer = Customer.objects.get(user=request.user)
+        if order.customer != customer:
+            messages.error(request, "You don't have permission to view this order.")
+            return redirect('customer_dashboard')
+    except Customer.DoesNotExist:
+        try:
+            shopkeeper = Shopkeeper.objects.get(user=request.user)
+            if order.product.shopkeeper != shopkeeper:
+                messages.error(request, "You don't have permission to view this order.")
+                return redirect('shopkeeper_dashboard')
+        except Shopkeeper.DoesNotExist:
+            messages.error(request, "You don't have permission to view this order.")
+            return redirect('login')
+    
+    context = {
+        'order': order,
+        'google_maps_api_key': settings.GOOGLE_MAPS_API_KEY
+    }
+    return render(request, 'core/order_detail.html', context)
+
+@login_required
 def customer_dashboard(request):
     try:
         customer = Customer.objects.get(user=request.user)
@@ -240,6 +443,42 @@ def shopkeeper_dashboard(request):
     return render(request, 'core/shopkeeper_dashboard.html', context)
 
 @login_required
+def review_shop(request, shop_id):
+    shop = get_object_or_404(Shopkeeper, id=shop_id)
+    
+    # Check if user is a customer
+    if hasattr(request.user, 'shopkeeper'):
+        messages.error(request, "Shopkeepers cannot review other shops.")
+        return redirect('shop_detail', shop_id=shop_id)
+    
+    try:
+        customer = Customer.objects.get(user=request.user)
+    except Customer.DoesNotExist:
+        messages.error(request, "Only customers can write reviews.")
+        return redirect('shop_detail', shop_id=shop_id)
+    
+    # Get existing review if any
+    existing_review = Review.objects.filter(customer=customer, shop=shop).first()
+    
+    if request.method == 'POST':
+        form = ReviewForm(request.POST, instance=existing_review)
+        if form.is_valid():
+            review = form.save(commit=False)
+            review.customer = customer
+            review.shop = shop
+            review.save()
+            messages.success(request, "Your review has been saved!")
+            return redirect('shop_detail', shop_id=shop_id)
+    else:
+        form = ReviewForm(instance=existing_review)
+    
+    return render(request, 'core/review_form.html', {
+        'form': form,
+        'shop': shop,
+        'existing_review': existing_review
+    })
+
+@login_required
 def edit_shop_profile(request):
     try:
         shopkeeper = Shopkeeper.objects.get(user=request.user)
@@ -274,7 +513,10 @@ def customer_profile(request):
     else:
         form = CustomerProfileForm(instance=customer)
     
-    return render(request, 'core/customer_profile_form.html', {'form': form})
+    return render(request, 'core/customer_profile_form.html', {
+        'form': form,
+        'google_maps_api_key': settings.GOOGLE_MAPS_API_KEY
+    })
 
 @login_required
 def change_password(request):
@@ -411,8 +653,16 @@ from django.conf import settings
 
 def shop_detail(request, shopkeeper_id):
     from django.conf import settings
+    from django.db.models import Count, Q
     shopkeeper = get_object_or_404(Shopkeeper, id=shopkeeper_id)
-    products = Product.objects.filter(shopkeeper=shopkeeper, stock__gt=0)
+    products = Product.objects.filter(shopkeeper=shopkeeper).order_by('-stock', 'name')  # Show in-stock items first
+    
+    # Get store statistics
+    store_stats = {
+        'total_products': products.count(),
+        'in_stock_products': products.filter(stock__gt=0).count(),
+        'out_of_stock_products': products.filter(stock=0).count(),
+    }
     
     distance = None
     user_location = None

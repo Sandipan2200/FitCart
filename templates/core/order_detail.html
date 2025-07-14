@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <!-- Order Header -->
+            <div class="p-6 border-b">
+                <div class="flex justify-between items-center">
+                    <h1 class="text-2xl font-bold">Order #{{ order.id }}</h1>
+                    <span class="px-4 py-2 rounded-full text-sm 
+                        {% if order.status == 'Pending' %}bg-yellow-100 text-yellow-800
+                        {% elif order.status == 'On Way' %}bg-blue-100 text-blue-800
+                        {% elif order.status == 'Arrived' %}bg-purple-100 text-purple-800
+                        {% elif order.status == 'Completed' %}bg-green-100 text-green-800
+                        {% else %}bg-red-100 text-red-800{% endif %}">
+                        {{ order.status }}
+                    </span>
+                </div>
+                <p class="text-gray-600 mt-2">Ordered on {{ order.created_at|date:"F j, Y, g:i a" }}</p>
+            </div>
+
+            <!-- Order Details -->
+            <div class="p-6">
+                <!-- Product Information -->
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold mb-4">Product Details</h2>
+                    <div class="flex items-center space-x-4">
+                        {% if order.product.image %}
+                        <img src="{{ order.product.image.url }}" alt="{{ order.product.name }}" 
+                             class="w-24 h-24 object-cover rounded-lg">
+                        {% endif %}
+                        <div>
+                            <h3 class="font-medium">{{ order.product.name }}</h3>
+                            <p class="text-gray-600">Price: {{ order.product.price|inr }}</p>
+                            <p class="text-gray-600">Quantity: {{ order.quantity }}</p>
+                            <p class="text-gray-600">Total: {{ order.product.price|multiply:order.quantity|inr }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Shop Information -->
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold mb-4">Shop Information</h2>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <p class="font-medium">{{ order.product.shopkeeper.shop_name }}</p>
+                        <p class="text-gray-600">{{ order.product.shopkeeper.address }}</p>
+                        <p class="text-gray-600">Phone: {{ order.product.shopkeeper.phone }}</p>
+                    </div>
+                </div>
+
+                <!-- Delivery Note -->
+                {% if order.delivery_note %}
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold mb-4">Delivery Note</h2>
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <p class="text-gray-700">{{ order.delivery_note }}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Map Section -->
+                {% if order.status != 'Completed' and order.status != 'Cancelled' %}
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold mb-4">Location Tracking</h2>
+                    
+                    <!-- Location Status -->
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-blue-50 rounded-lg p-4">
+                            <h3 class="font-medium text-blue-800 mb-2">Your Location</h3>
+                            <p class="text-sm text-gray-600" id="customerLocation">Waiting for location...</p>
+                            <p class="text-xs text-gray-500 mt-1" id="locationUpdateTime"></p>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <h3 class="font-medium text-green-800 mb-2">Shop Location</h3>
+                            <p class="text-sm text-gray-600">{{ order.product.shopkeeper.address }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Map -->
+                    <div id="map" class="w-full h-80 rounded-lg"></div>
+                    
+                    <!-- Journey Info -->
+                    <div id="directionsInfo" class="mt-4 bg-gray-50 rounded-lg p-4 hidden">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <span class="font-medium">Estimated Time:</span>
+                                <span id="estimatedTime" class="text-blue-600">Calculating...</span>
+                            </div>
+                            <div>
+                                <span class="font-medium">Distance:</span>
+                                <span id="distance" class="text-blue-600">Calculating...</span>
+                            </div>
+                        </div>
+                        <div class="mt-3 pt-3 border-t border-gray-200">
+                            <p class="text-sm text-gray-600">
+                                <span class="font-medium">Status:</span>
+                                <span id="journeyStatus">Waiting to start...</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-center">
+                    <button id="startJourneyBtn" 
+                            class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        Start Journey to Shop
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if order.status != 'Completed' and order.status != 'Cancelled' %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}"></script>
+<script>
+let map;
+let directionsService;
+let directionsRenderer;
+let userMarker;
+let watchId;
+let geocoder;
+
+function initMap() {
+    geocoder = new google.maps.Geocoder();
+    const shopLocation = { 
+        lat: {{ order.product.shopkeeper.latitude }}, 
+        lng: {{ order.product.shopkeeper.longitude }} 
+    };
+
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 15,
+        center: shopLocation
+    });
+
+    // Shop marker
+    new google.maps.Marker({
+        position: shopLocation,
+        map: map,
+        title: '{{ order.product.shopkeeper.shop_name }}',
+        icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+    });
+
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({
+        map: map,
+        suppressMarkers: true
+    });
+
+    // Start Journey button
+    document.getElementById('startJourneyBtn').addEventListener('click', function() {
+        if (navigator.geolocation) {
+            this.disabled = true;
+            this.textContent = 'Tracking Location...';
+            document.getElementById('directionsInfo').classList.remove('hidden');
+            
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const userLocation = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+
+                    // Start continuous tracking
+                    watchId = navigator.geolocation.watchPosition(
+                        updateLocation,
+                        null,
+                        { enableHighAccuracy: true }
+                    );
+
+                    // Create user marker
+                    userMarker = new google.maps.Marker({
+                        position: userLocation,
+                        map: map,
+                        title: 'Your Location',
+                        icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                    });
+
+                    // Get initial address
+                    geocoder.geocode({ location: userLocation }, (results, status) => {
+                        if (status === 'OK' && results[0]) {
+                            document.getElementById('customerLocation').textContent = results[0].formatted_address;
+                        }
+                    });
+
+                    // Show directions panel
+                    document.getElementById('directionsInfo').classList.remove('hidden');
+                    document.getElementById('journeyStatus').textContent = 'Journey started';
+                    document.getElementById('locationUpdateTime').textContent = `Started at ${new Date().toLocaleTimeString()}`;
+
+                    updateLocation(position);
+                },
+                error => {
+                    alert('Error getting your location. Please enable location services.');
+                    this.disabled = false;
+                    this.textContent = 'Start Journey to Shop';
+                }
+            );
+        } else {
+            alert('Geolocation is not supported by your browser');
+        }
+    });
+}
+
+function updateLocation(position) {
+    const userLocation = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+    };
+
+    // Update user marker position
+    if (userMarker) {
+        userMarker.setPosition(userLocation);
+    }
+
+    // Calculate and display route
+    directionsService.route(
+        {
+            origin: userLocation,
+            destination: { 
+                lat: {{ order.product.shopkeeper.latitude }}, 
+                lng: {{ order.product.shopkeeper.longitude }} 
+            },
+            travelMode: google.maps.TravelMode.DRIVING
+        },
+        (response, status) => {
+            if (status === 'OK') {
+                directionsRenderer.setDirections(response);
+                
+                // Update info
+                const route = response.routes[0];
+                document.getElementById('estimatedTime').textContent = route.legs[0].duration.text;
+                document.getElementById('distance').textContent = route.legs[0].distance.text;
+
+                // Send location update to server
+                fetch('/api/update-location/{{ order.id }}/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({
+                        lat: userLocation.lat,
+                        lng: userLocation.lng,
+                        distance: route.legs[0].distance.value / 1000  // Convert to kilometers
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success' && data.order_status === 'Arrived') {
+                        if (watchId) {
+                            navigator.geolocation.clearWatch(watchId);
+                            watchId = null;
+                        }
+                        alert('You have arrived at the shop!');
+                        location.reload();
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            }
+        }
+    );
+}
+
+// Initialize map when page loads
+initMap();
+</script>
+{% endif %}
+{% endblock %}

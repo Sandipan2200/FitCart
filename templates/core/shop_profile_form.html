@@ -5,6 +5,21 @@
     <h2 class="text-2xl font-bold mb-6">Edit Shop Profile</h2>
     <form method="post" enctype="multipart/form-data" class="max-w-lg">
         {% csrf_token %}
+        
+        {% if form.instance.logo %}
+        <div class="mb-6">
+            <img src="{{ form.instance.logo.url }}" alt="Current Logo" class="w-32 h-32 object-cover rounded-lg mb-2">
+            <p class="text-sm text-gray-600">Current Logo</p>
+        </div>
+        {% endif %}
+
+        {% if form.instance.shop_image %}
+        <div class="mb-6">
+            <img src="{{ form.instance.shop_image.url }}" alt="Current Shop Image" class="w-full h-48 object-cover rounded-lg mb-2">
+            <p class="text-sm text-gray-600">Current Shop Image</p>
+        </div>
+        {% endif %}
+
         {% for field in form %}
         <div class="mb-4">
             <label class="block text-gray-700 text-sm font-bold mb-2" for="{{ field.id_for_label }}">

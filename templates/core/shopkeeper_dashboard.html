@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
+{% load stock_status %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
@@ -29,6 +31,9 @@
                 <div class="mt-6 space-y-2">
                     <a href="{% url 'edit_shop_profile' %}" class="block w-full text-center py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700">
                         Edit Shop Profile
+                    </a>
+                    <a href="{% url 'order_tracking' %}" class="block w-full text-center py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700">
+                        Track Active Orders
                     </a>
                     <a href="{% url 'change_password' %}" class="block w-full text-center py-2 px-4 border border-blue-600 text-blue-600 rounded hover:bg-blue-50">
                         Change Password
@@ -78,10 +83,13 @@
                                 {% endif %}
                                 <div class="flex-1">
                                     <h4 class="font-medium">{{ product.name }}</h4>
-                                    <p class="text-sm text-gray-600">${{ product.price }}</p>
-                                    <p class="text-sm {% if product.stock > 0 %}text-green-600{% else %}text-red-600{% endif %}">
-                                        Stock: {{ product.stock }}
-                                    </p>
+                                    <p class="text-sm text-gray-600">{{ product.price|inr }}</p>
+                                    <div class="flex items-center justify-between">
+                                        <div>{% stock_badge product %}</div>
+                                        {% if product.stock <= 3 %}
+                                            <span class="text-yellow-600 text-sm font-medium">⚠️ Low Stock Alert</span>
+                                        {% endif %}
+                                    </div>
                                     <div class="mt-2 space-x-2">
                                         <a href="{% url 'edit_product' product.id %}" 
                                            class="text-blue-600 hover:underline text-sm">Edit</a>
@@ -109,8 +117,9 @@
                                 <div>
                                     <p class="font-medium">Order #{{ order.id }}</p>
                                     <p class="text-sm text-gray-600">{{ order.created_at|date:"M d, Y" }}</p>
-                                    <p class="text-sm text-gray-600">Customer: {{ order.customer.user.username }}</p>
-                                    <p class="mt-1">Total: ${{ order.total }}</p>
+                                    <p class="text-sm text-gray-600">Customer: {{ order.customer.user.get_full_name|default:order.customer.user.username }}</p>
+                                    <p class="text-sm text-gray-600">Product: {{ order.product.name }} ({{ order.quantity }}x)</p>
+                                    <p class="mt-1">Total: {{ order.total_price|inr }}</p>
                                 </div>
                                 <form method="post" action="{% url 'update_order_status' order.id %}" class="flex items-center space-x-2">
                                     {% csrf_token %}

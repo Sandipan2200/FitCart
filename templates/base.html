@@ -5,16 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}FitCart{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body class="bg-gray-100 font-sans">
     <!-- Navbar -->
+    <div x-data="{ sidebarOpen: false }">
     <nav class="bg-blue-600 text-white p-4">
         <div class="container mx-auto flex justify-between items-center">
             <a href="{% url 'dashboard' %}" class="text-2xl font-bold">FitCart</a>
-            <div class="space-x-4 flex items-center">
+            <div class="flex items-center space-x-4">
                 {% if user.is_authenticated %}
-                    <span>Welcome, {{ user.username }}</span>
+                    <a href="{% url 'index' %}" class="hover:underline">Home</a>
                     <a href="{% url 'dashboard' %}" class="hover:underline">Dashboard</a>
                     {% if not user.shopkeeper %}
                     <a href="{% url 'view_cart' %}" class="relative hover:opacity-80">
@@ -28,7 +30,13 @@
                         {% endif %}
                     </a>
                     {% endif %}
-                    <a href="{% url 'logout' %}" class="hover:underline">Logout</a>
+                    
+                    <!-- Menu Button -->
+                    <button @click="sidebarOpen = true" class="focus:outline-none hover:opacity-80">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF">
+                            <path d="M480-160q-33 0-56.5-23.5T400-240q0-33 23.5-56.5T480-320q33 0 56.5 23.5T560-240q0 33-23.5 56.5T480-160Zm0-240q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm0-240q-33 0-56.5-23.5T400-720q0-33 23.5-56.5T480-800q33 0 56.5 23.5T560-720q0 33-23.5 56.5T480-640Z"/>
+                        </svg>
+                    </button>
                 {% else %}
                     <a href="{% url 'login' %}" class="hover:underline">Login</a>
                     <a href="{% url 'register' %}" class="hover:underline">Register</a>
@@ -36,6 +44,101 @@
             </div>
         </div>
     </nav>
+
+    <!-- Sidebar Overlay -->
+        <!-- Overlay -->
+        <div x-show="sidebarOpen" 
+             @click="sidebarOpen = false"
+             class="fixed inset-0 bg-black bg-opacity-50 transition-opacity z-40"
+             x-transition:enter="transition-opacity ease-linear duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-linear duration-300"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+        </div>
+
+        <!-- Sidebar -->
+        <div x-show="sidebarOpen"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="translate-x-full"
+             x-transition:enter-end="translate-x-0"
+             x-transition:leave="transition ease-in duration-300"
+             x-transition:leave-start="translate-x-0"
+             x-transition:leave-end="translate-x-full"
+             class="fixed top-0 right-0 h-full w-80 bg-white shadow-lg z-50 overflow-y-auto">
+            
+            <!-- Sidebar Header -->
+            <div class="flex items-center justify-between p-4 border-b">
+                <h2 class="text-xl font-semibold text-gray-800">Menu</h2>
+                <button @click="sidebarOpen = false" class="p-2 rounded-md hover:bg-gray-100">
+                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Sidebar Content -->
+            {% if user.is_authenticated %}
+            <div class="p-4 border-b bg-gray-50">
+                <p class="font-medium text-gray-900">Welcome, {{ user.username }}</p>
+            </div>
+
+            <nav class="p-4">
+                <div class="space-y-4">
+                    <div class="border-b pb-4">
+                        <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-3">Navigation</h3>
+                        <div class="space-y-2">
+                            <a href="{% url 'dashboard' %}" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                                Dashboard
+                            </a>
+                            <a href="{% url 'index' %}" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                                Home
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="border-b pb-4">
+                        <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-3">Account</h3>
+                        <div class="space-y-2">
+                            {% if user.shopkeeper %}
+                            <a href="{% url 'edit_shop_profile' %}" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                                Shop Settings
+                            </a>
+                            <a href="{% url 'order_tracking' %}" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                                Track Orders
+                            </a>
+                            {% else %}
+                            <a href="{% url 'customer_profile' %}" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                                Profile Settings
+                            </a>
+                            {% endif %}
+                            <a href="{% url 'change_password' %}" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                                Change Password
+                            </a>
+                        </div>
+                    </div>
+
+                    <div>
+                        <a href="{% url 'logout' %}" class="block px-4 py-2 rounded-lg text-red-600 hover:bg-red-50">
+                            Logout
+                        </a>
+                    </div>
+                </div>
+            </nav>
+            {% else %}
+            <div class="p-4 space-y-4">
+                <a href="{% url 'login' %}" class="block w-full text-center py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Login
+                </a>
+                <a href="{% url 'register' %}" class="block w-full text-center py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50">
+                    Register
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    </div>
 
     <!-- Messages -->
     {% if messages %}

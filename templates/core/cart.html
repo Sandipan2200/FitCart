@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
@@ -15,9 +16,9 @@
                         {% endif %}
                         <div>
                             <h3 class="text-lg font-semibold">{{ item.product.name }}</h3>
-                            <p class="text-gray-600">Price: ${{ item.product.price }}</p>
+                            <p class="text-gray-600">Price: {{ item.product.price|inr }}</p>
                             <p class="text-gray-600">Quantity: {{ item.quantity }}</p>
-                            <p class="text-gray-600">Subtotal: ${{ item.subtotal }}</p>
+                            <p class="text-gray-600">Subtotal: {{ item.subtotal|inr }}</p>
                         </div>
                     </div>
                     <div class="flex items-center space-x-4">
@@ -38,12 +39,32 @@
             
             <div class="mt-8 bg-white p-6 rounded-lg shadow-md">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-semibold">Cart Total: ${{ total }}</h2>
-                    <button id="showDirectionsBtn" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
-                        Show Directions to Shop
-                    </button>
+                    <div>
+                        <h2 class="text-xl font-semibold">Cart Total: {{ total|inr }}</h2>
+                        <a href="{% url 'place_order' %}" class="mt-4 inline-block bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                            Place Order
+                        </a>
+                    </div>
+                    <div class="space-x-4">
+                        <button id="showDirectionsBtn" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                            Show Directions to Shop
+                        </button>
+                        <button id="startTrackingBtn" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 hidden">
+                            Start Journey to Shop
+                        </button>
+                    </div>
                 </div>
                 <div id="map" class="w-full h-96 mt-4 hidden"></div>
+                <div id="directionsInfo" class="mt-4 p-4 bg-blue-50 rounded-lg hidden">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-semibold">Estimated Time:</span>
+                        <span id="estimatedTime">Calculating...</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold">Distance Remaining:</span>
+                        <span id="distanceRemaining">Calculating...</span>
+                    </div>
+                </div>
                 <div id="directionsPanel" class="mt-4 hidden"></div>
             </div>
         </div>
@@ -66,6 +87,7 @@ let directionsRenderer;
 let userMarker;
 let watchId;
 let currentRoute;
+let locationUpdateInterval;
 
 function initMap() {
     directionsService = new google.maps.DirectionsService();
@@ -126,6 +148,38 @@ function updateUserLocation(position) {
     // Update route if we have a destination
     if (currentRoute) {
         calculateAndDisplayRoute(userLatLng, currentRoute.destination);
+        
+        // Calculate distance to shop
+        const shopLatLng = new google.maps.LatLng(
+            currentRoute.destination.lat,
+            currentRoute.destination.lng
+        );
+        const distance = google.maps.geometry.spherical.computeDistanceBetween(
+            new google.maps.LatLng(userLatLng.lat, userLatLng.lng),
+            shopLatLng
+        ) / 1000; // Convert to kilometers
+        
+        // Send location update to server
+        fetch(`/api/update-location/${currentRoute.orderId}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                lat: userLatLng.lat,
+                lng: userLatLng.lng,
+                distance: distance
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.order_status === 'Arrived') {
+                stopTracking();
+                alert('You have arrived at the shop!');
+            }
+        })
+        .catch(error => console.error('Error updating location:', error));
     }
 }
 
@@ -148,7 +202,7 @@ function handleLocationError(error) {
     alert(message);
 }
 
-function startTracking() {
+function startTracking(orderId) {
     if (navigator.geolocation) {
         // Get initial position
         navigator.geolocation.getCurrentPosition(
@@ -165,6 +219,22 @@ function startTracking() {
                         timeout: 27000
                     }
                 );
+                
+                // Set up interval to update location periodically
+                locationUpdateInterval = setInterval(() => {
+                    navigator.geolocation.getCurrentPosition(
+                        updateUserLocation,
+                        handleLocationError,
+                        {
+                            enableHighAccuracy: true,
+                            maximumAge: 0,
+                            timeout: 5000
+                        }
+                    );
+                }, 30000); // Update every 30 seconds
+                
+                // Show tracking button
+                document.getElementById('startTrackingBtn').classList.remove('hidden');
             },
             handleLocationError
         );
@@ -178,10 +248,15 @@ function stopTracking() {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
     }
+    if (locationUpdateInterval) {
+        clearInterval(locationUpdateInterval);
+        locationUpdateInterval = null;
+    }
     if (userMarker) {
         userMarker.setMap(null);
         userMarker = null;
     }
+    document.getElementById('startTrackingBtn').classList.add('hidden');
 }
 
 document.getElementById('showDirectionsBtn').addEventListener('click', function() {
@@ -201,15 +276,22 @@ document.getElementById('showDirectionsBtn').addEventListener('click', function(
             initMap();
         }
         
-        startTracking();
-        
-        // Set destination
+        // Set destination and order information
         currentRoute = {
             destination: {
                 lat: {{ shop_location.lat }},
                 lng: {{ shop_location.lng }}
-            }
+            },
+            orderId: {{ current_order.id|default:"null" }}
         };
+        
+        // Only start tracking if there's an active order
+        if (currentRoute.orderId) {
+            startTracking();
+        } else {
+            alert('Please place an order before starting navigation.');
+            return;
+        }
     } else {
         // Hide map and stop tracking
         mapDiv.classList.add('hidden');
@@ -239,28 +321,26 @@ function calculateAndDisplayRoute(origin, destination) {
                 const duration = leg.duration.text;
                 
                 // Update info panel
-                const infoPanel = document.getElementById('directionsPanel');
-                infoPanel.innerHTML = `
+                document.getElementById('estimatedTime').textContent = duration;
+                document.getElementById('distanceRemaining').textContent = distance;
+                
+                // Update directions panel
+                const directionsPanel = document.getElementById('directionsPanel');
+                directionsPanel.innerHTML = `
                     <div class="bg-white p-4 rounded-lg shadow-md">
-                        <div class="font-semibold text-lg mb-2">Journey Details</div>
-                        <div class="text-gray-600">
-                            <p>Distance: ${distance}</p>
-                            <p>Estimated Time: ${duration}</p>
-                        </div>
-                        <div class="mt-4">
-                            <div class="font-medium">Turn by turn directions:</div>
-                            ${route.legs[0].steps.map((step, index) => `
-                                <div class="mt-2 pb-2 border-b border-gray-200">
-                                    <span class="font-medium text-blue-600">${index + 1}.</span>
-                                    ${step.instructions}
-                                    <div class="text-sm text-gray-500">${step.distance.text}</div>
-                                </div>
-                            `).join('')}
-                        </div>
+                        <div class="font-medium mb-4">Turn by turn directions:</div>
+                        ${route.legs[0].steps.map((step, index) => `
+                            <div class="mt-2 pb-2 border-b border-gray-200">
+                                <span class="font-medium text-blue-600">${index + 1}.</span>
+                                ${step.instructions}
+                                <div class="text-sm text-gray-500">${step.distance.text}</div>
+                            </div>
+                        `).join('')}
                     </div>
                 `;
                 
                 directionsRenderer.setDirections(response);
+                document.getElementById('directionsInfo').classList.remove('hidden');
             } else {
                 window.alert('Directions request failed due to ' + status);
             }

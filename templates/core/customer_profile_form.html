@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h2 class="text-2xl font-bold mb-6">Edit Profile</h2>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Edit Form -->
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+            <h3 class="text-lg font-semibold mb-4">Personal Information</h3>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                <!-- Name Section -->
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="{{ form.first_name.id_for_label }}">
+                            First Name
+                        </label>
+                        {{ form.first_name }}
+                        {% if form.first_name.errors %}
+                        <div class="text-red-500 text-sm mt-1">{{ form.first_name.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="{{ form.last_name.id_for_label }}">
+                            Last Name
+                        </label>
+                        {{ form.last_name }}
+                        {% if form.last_name.errors %}
+                        <div class="text-red-500 text-sm mt-1">{{ form.last_name.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Email -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="{{ form.email.id_for_label }}">
+                        Email
+                    </label>
+                    {{ form.email }}
+                    {% if form.email.errors %}
+                    <div class="text-red-500 text-sm mt-1">{{ form.email.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Phone -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="{{ form.phone.id_for_label }}">
+                        Phone Number
+                    </label>
+                    {{ form.phone }}
+                    {% if form.phone.errors %}
+                    <div class="text-red-500 text-sm mt-1">{{ form.phone.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Address -->
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="{{ form.address.id_for_label }}">
+                        Address
+                    </label>
+                    {{ form.address }}
+                    {% if form.address.errors %}
+                    <div class="text-red-500 text-sm mt-1">{{ form.address.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">
+                        Save Changes
+                    </button>
+                    <a href="{% url 'customer_dashboard' %}" class="text-gray-600 hover:text-gray-800">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Location Information -->
+        <div>
+            {% if form.instance.latitude and form.instance.longitude %}
+            <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+                <h3 class="text-lg font-semibold mb-4">Your Current Location</h3>
+                <div id="map" class="w-full h-[300px] rounded-lg mb-4"></div>
+                <div class="text-sm text-gray-600">
+                    <p>Your location is set and can only be updated during order placement.</p>
+                    <p class="mt-2">
+                        <span class="font-medium">Latitude:</span> {{ form.instance.latitude }}<br>
+                        <span class="font-medium">Longitude:</span> {{ form.instance.longitude }}
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if form.instance.latitude and form.instance.longitude %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}"></script>
+<script>
+function initMap() {
+    const customerLocation = {
+        lat: {{ form.instance.latitude }},
+        lng: {{ form.instance.longitude }}
+    };
+
+    const map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 15,
+        center: customerLocation,
+    });
+
+    new google.maps.Marker({
+        position: customerLocation,
+        map: map,
+        title: 'Your Location'
+    });
+}
+
+initMap();
+</script>
+{% endif %}
+{% endblock %}

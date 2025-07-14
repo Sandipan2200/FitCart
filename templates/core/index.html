@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load custom_filters %}
 {% block title %}FitCart - Find Local Shops{% endblock %}
 
 {% block content %}
@@ -23,19 +24,46 @@
         <div class="bg-white p-6 rounded-lg shadow-md">
             <h2 class="text-2xl font-bold mb-4">Nearby Shops</h2>
             {% if shops %}
-                <div class="space-y-4">
+                <div class="space-y-6">
                     {% for shop in shops %}
                         <div class="border p-4 rounded-lg hover:bg-gray-50 transition-colors">
-                            <h3 class="text-xl font-semibold">{{ shop.shop_name }}</h3>
-                            <p class="text-gray-600">{{ shop.address }}</p>
-                            {% if user_location %}
-                                <p class="text-sm text-blue-600">
-                                    Distance: {{ shop.distance|default:"Calculating..." }} km
-                                </p>
+                            <div class="flex items-start space-x-4">
+                                {% if shop.logo %}
+                                <div class="flex-shrink-0">
+                                    <img src="{{ shop.logo.url }}" alt="{{ shop.shop_name }} Logo" class="w-16 h-16 object-cover rounded-lg">
+                                </div>
+                                {% endif %}
+                                <div class="flex-grow">
+                                    <h3 class="text-xl font-semibold">{{ shop.shop_name }}</h3>
+                                    <p class="text-gray-600">{{ shop.address }}</p>
+                                    {% if shop.business_hours %}
+                                        <p class="text-sm text-gray-500 mt-1">{{ shop.business_hours }}</p>
+                                    {% endif %}
+                                    {% if user_location %}
+                                        <p class="text-sm text-blue-600 mt-1">
+                                            Distance: {{ shop.distance|default:"Calculating..." }} km
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            {% if shop.shop_image %}
+                            <div class="mt-4">
+                                <img src="{{ shop.shop_image.url }}" alt="{{ shop.shop_name }}" class="w-full h-48 object-cover rounded-lg">
+                            </div>
                             {% endif %}
-                            <a href="{% url 'shop_detail' shop.id %}" class="mt-2 inline-block text-blue-600 hover:underline">
-                                View Products →
-                            </a>
+                            
+                            <div class="mt-4 flex justify-between items-center">
+                                <a href="{% url 'shop_detail' shop.id %}" class="inline-flex items-center text-blue-600 hover:text-blue-800">
+                                    <span>View Products</span>
+                                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                </a>
+                                {% if shop.categories %}
+                                <span class="text-sm text-gray-500">{{ shop.categories }}</span>
+                                {% endif %}
+                            </div>
                         </div>
                     {% endfor %}
                 </div>

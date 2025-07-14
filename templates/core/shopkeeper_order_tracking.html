@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">Active Orders Tracking</h1>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Orders List -->
+        <div class="lg:col-span-1 space-y-4">
+            <div class="bg-white rounded-lg shadow-md p-4">
+                <h2 class="text-lg font-semibold mb-4">Active Orders</h2>
+                <div class="space-y-4" id="activeOrdersList">
+                    {% for order in active_orders %}
+                    <div class="border-b pb-4 last:border-0" id="order-{{ order.id }}">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <span class="font-medium">Order #{{ order.id }}</span>
+                                <p class="text-sm text-gray-600">{{ order.customer_name }}</p>
+                            </div>
+                            <span class="px-2 py-1 rounded-full text-xs 
+                                {% if order.status == 'Pending' %}bg-yellow-100 text-yellow-800
+                                {% elif order.status == 'On Way' %}bg-blue-100 text-blue-800
+                                {% elif order.status == 'Arrived' %}bg-purple-100 text-purple-800
+                                {% endif %}">
+                                {{ order.status }}
+                            </span>
+                        </div>
+                        <div class="text-sm">
+                            <p class="text-gray-600">{{ order.product.name }} × {{ order.quantity }}</p>
+                            <p class="text-gray-600">Total: {{ order.product.price|multiply:order.quantity|inr }}</p>
+                            <div class="mt-2">
+                                <span class="text-xs text-gray-500" id="lastUpdate-{{ order.id }}">
+                                    {% if order.last_location_update %}
+                                        Last update: {{ order.last_location_update|timesince }} ago
+                                    {% else %}
+                                        Waiting for customer...
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="text-gray-600 text-center py-4">No active orders at the moment</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Map -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-md p-4">
+                <div id="map" class="w-full h-[600px] rounded-lg"></div>
+                <div id="orderDetails" class="mt-4 hidden">
+                    <h3 class="font-semibold mb-2">Selected Order Details</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-sm text-gray-600">Customer Location</p>
+                            <p id="customerLocation" class="font-medium">Updating...</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">Estimated Arrival</p>
+                            <p id="estimatedArrival" class="font-medium">Calculating...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry"></script>
+<script>
+let map;
+let markers = {};
+let infoWindows = {};
+const shopLocation = { 
+    lat: {{ shop.latitude }}, 
+    lng: {{ shop.longitude }} 
+};
+
+function initMap() {
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: shopLocation
+    });
+
+    // Add shop marker
+    new google.maps.Marker({
+        position: shopLocation,
+        map: map,
+        title: '{{ shop.shop_name }}',
+        icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+    });
+
+    // Initialize customer markers for active orders
+    {% for order in active_orders %}
+    {% if order.last_location_lat and order.last_location_lng %}
+    addCustomerMarker(
+        {{ order.id }}, 
+        { lat: {{ order.last_location_lat }}, lng: {{ order.last_location_lng }} },
+        '{{ order.customer_name }}',
+        '{{ order.status }}'
+    );
+    {% endif %}
+    {% endfor %}
+
+    // Start periodic updates
+    setInterval(updateLocations, 30000); // Update every 30 seconds
+}
+
+function addCustomerMarker(orderId, position, customerName, status) {
+    // Remove existing marker if any
+    if (markers[orderId]) {
+        markers[orderId].setMap(null);
+    }
+
+    // Create marker
+    markers[orderId] = new google.maps.Marker({
+        position: position,
+        map: map,
+        title: `Customer: ${customerName}`,
+        icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+    });
+
+    // Create info window
+    infoWindows[orderId] = new google.maps.InfoWindow({
+        content: `
+            <div class="p-2">
+                <p class="font-medium">Order #${orderId}</p>
+                <p>${customerName}</p>
+                <p class="text-sm">${status}</p>
+            </div>
+        `
+    });
+
+    // Add click listener
+    markers[orderId].addListener('click', () => {
+        // Close all info windows
+        Object.values(infoWindows).forEach(window => window.close());
+        // Open this info window
+        infoWindows[orderId].open(map, markers[orderId]);
+        // Show order details
+        showOrderDetails(orderId);
+    });
+}
+
+function showOrderDetails(orderId) {
+    document.getElementById('orderDetails').classList.remove('hidden');
+    // Add any additional order details you want to show
+}
+
+function updateLocations() {
+    fetch('/api/active-orders-location/')
+        .then(response => response.json())
+        .then(orders => {
+            orders.forEach(order => {            if (order.last_location_lat && order.last_location_lng) {
+                const position = {
+                    lat: order.last_location_lat,
+                    lng: order.last_location_lng
+                };
+                
+                // Calculate distance from shop
+                const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                    new google.maps.LatLng(position),
+                    new google.maps.LatLng(shopLocation)
+                );
+                
+                // If customer is within 50 meters of the shop
+                const orderElement = document.getElementById(`order-${order.id}`);
+                if (distance <= 50) {
+                    if (!orderElement.querySelector('.arrival-notification')) {
+                        const notification = document.createElement('div');
+                        notification.className = 'arrival-notification text-green-600 font-medium mt-2';
+                        notification.innerHTML = '✓ Customer has arrived at the shop!';
+                        orderElement.querySelector('.text-sm').appendChild(notification);
+                    }
+                } else {
+                    const notification = orderElement.querySelector('.arrival-notification');
+                    if (notification) {
+                        notification.remove();
+                    }
+                }
+                
+                addCustomerMarker(order.id, position, order.customer_name, order.status);
+                
+                // Update last update time
+                const lastUpdateElem = document.getElementById(`lastUpdate-${order.id}`);
+                    if (lastUpdateElem) {
+                        lastUpdateElem.textContent = `Last update: ${order.last_update_time}`;
+                    }
+
+                    // Update order status
+                    const orderElem = document.getElementById(`order-${order.id}`);
+                    if (orderElem) {
+                        // Update status display
+                        const statusElem = orderElem.querySelector('.rounded-full');
+                        if (statusElem) {
+                            statusElem.textContent = order.status;
+                            // Update status colors based on status
+                            statusElem.className = `px-2 py-1 rounded-full text-xs ${
+                                order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                order.status === 'On Way' ? 'bg-blue-100 text-blue-800' :
+                                order.status === 'Arrived' ? 'bg-purple-100 text-purple-800' :
+                                'bg-gray-100 text-gray-800'
+                            }`;
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => console.error('Error updating locations:', error));
+}
+
+// Initialize map when page loads
+initMap();
+</script>
+{% endblock %}

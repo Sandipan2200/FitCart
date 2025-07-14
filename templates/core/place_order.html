@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">Place Order</h1>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Order Summary -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Order Summary</h2>
+            {% for item in cart_items %}
+            <div class="flex justify-between items-center py-2 border-b">
+                <div>
+                    <p class="font-medium">{{ item.product.name }}</p>
+                    <p class="text-sm text-gray-600">Quantity: {{ item.quantity }}</p>
+                </div>
+                <p class="text-gray-800">{{ item.subtotal|inr }}</p>
+            </div>
+            {% endfor %}
+            <div class="mt-4 pt-2 border-t">
+                <div class="flex justify-between items-center font-semibold">
+                    <span>Total Amount:</span>
+                    <span>{{ total|inr }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Form -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Delivery Information</h2>
+            <form method="post" action="{% url 'place_order' %}" class="space-y-4">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="delivery_note">
+                        Delivery Note (Optional)
+                    </label>
+                    <textarea name="delivery_note" id="delivery_note" rows="3" 
+                              class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Any special instructions for the shop..."></textarea>
+                </div>
+
+                <div class="flex items-center space-x-2 mt-4">
+                    <input type="checkbox" id="confirm" name="confirm" required
+                           class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <label for="confirm" class="text-sm text-gray-700">
+                        I confirm that I will pick up this order from the shop
+                    </label>
+                </div>
+
+                <button type="submit" 
+                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    Place Order
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

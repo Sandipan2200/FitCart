@@ -1,4 +1,6 @@
 {% extends 'base.html' %}
+{% load custom_filters %}
+{% load stock_status %}
 {% block title %}{{ shop.shop_name }} - FitCart{% endblock %}
 
 {% block content %}
@@ -8,6 +10,24 @@
         <div class="flex justify-between items-start">
             <div>
                 <h1 class="text-3xl font-bold text-gray-900">{{ shop.shop_name }}</h1>
+                <div class="flex items-center mt-2">
+                    <div class="flex items-center">
+                        {% with avg_rating=shop.reviews.all|dictsort:"rating"|last %}
+                        {% for i in "12345" %}
+                        <svg class="w-5 h-5 {% if i|add:'0' <= avg_rating %}text-yellow-400{% else %}text-gray-300{% endif %}" 
+                            fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                        {% endfor %}
+                        {% endwith %}
+                        <span class="ml-2 text-sm text-gray-600">({{ shop.reviews.count }} reviews)</span>
+                    </div>
+                    {% if user.is_authenticated and not user.shopkeeper %}
+                    <a href="{% url 'review_shop' shop.id %}" class="ml-4 text-blue-600 hover:text-blue-800 text-sm">
+                        Write a Review
+                    </a>
+                    {% endif %}
+                </div>
                 <p class="text-gray-600 mt-2">{{ shop.address }}</p>
                 {% if shop.phone %}
                     <p class="text-gray-600">
@@ -25,9 +45,27 @@
         </div>
     </div>
 
+    <!-- Store Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-8">
+        <div class="grid grid-cols-3 gap-4 text-center">
+            <div>
+                <p class="text-gray-600">Total Products</p>
+                <p class="text-2xl font-bold">{{ store_stats.total_products }}</p>
+            </div>
+            <div>
+                <p class="text-green-600">In Stock</p>
+                <p class="text-2xl font-bold text-green-600">{{ store_stats.in_stock_products }}</p>
+            </div>
+            <div>
+                <p class="text-gray-500">Out of Stock</p>
+                <p class="text-2xl font-bold text-gray-500">{{ store_stats.out_of_stock_products }}</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Products Grid -->
     <div class="mb-8">
-        <h2 class="text-2xl font-bold mb-6">Available Products</h2>
+        <h2 class="text-2xl font-bold mb-6">All Products</h2>
         {% if products %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {% for product in products %}
@@ -43,26 +81,30 @@
                         {% endif %}
                         <div class="p-4">
                             <h3 class="text-xl font-semibold text-gray-900">{{ product.name }}</h3>
-                            <p class="text-gray-600 mt-1">₹{{ product.price }}</p>
+                            <p class="text-gray-600 mt-1">{{ product.price|inr }}</p>
                             {% if product.description %}
                                 <p class="text-gray-500 text-sm mt-2">{{ product.description|truncatewords:20 }}</p>
                             {% endif %}
-                            <div class="mt-4 flex justify-between items-center">
-                                <span class="text-sm font-medium {% if product.stock > 0 %}text-green-600{% else %}text-red-600{% endif %}">
-                                    {% if product.stock > 0 %}
-                                        In Stock ({{ product.stock }})
-                                    {% else %}
-                                        Out of Stock
+                            <div class="mt-4 flex flex-col space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <div>{% stock_badge product %}</div>
+                                    {% if not user.shopkeeper %}
+                                        <form method="post" action="{% url 'add_to_cart' product.id %}">
+                                            {% csrf_token %}
+                                            <button type="submit" 
+                                                class="{% if product.is_available %}bg-blue-600 hover:bg-blue-700{% else %}bg-gray-400 cursor-not-allowed{% endif %} text-white px-4 py-2 rounded transition-colors"
+                                                {% if not product.is_available %}disabled{% endif %}>
+                                                {% if product.is_available %}
+                                                    Add to Cart
+                                                {% else %}
+                                                    Out of Stock
+                                                {% endif %}
+                                            </button>
+                                        </form>
                                     {% endif %}
-                                </span>
-                                {% if product.stock > 0 %}
-                                    <form method="post" action="{% url 'add_to_cart' product.id %}">
-                                        {% csrf_token %}
-                                        <button type="submit" 
-                                            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors">
-                                            Add to Cart
-                                        </button>
-                                    </form>
+                                </div>
+                                {% if product.stock <= 3 and product.stock > 0 %}
+                                    <p class="text-yellow-600 text-sm">Hurry! Only {{ product.stock }} items left.</p>
                                 {% endif %}
                             </div>
                         </div>
