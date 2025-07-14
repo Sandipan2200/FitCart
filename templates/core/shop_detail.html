@@ -89,15 +89,22 @@
                                 <div class="flex items-center justify-between">
                                     <div>{% stock_badge product %}</div>
                                     {% if not user.shopkeeper %}
-                                        <form method="post" action="{% url 'add_to_cart' product.id %}">
+                                        <form method="post" action="{% url 'add_to_cart' product.id %}" class="flex items-center space-x-2">
                                             {% csrf_token %}
+                                            {% if product.is_available %}
+                                            <div class="flex items-center border rounded">
+                                                <input type="number" name="quantity" value="1" min="1" max="{{ product.stock }}"
+                                                    class="w-16 text-center border-none focus:ring-0 text-sm" />
+                                            </div>
                                             <button type="submit" 
-                                                class="{% if product.is_available %}bg-blue-600 hover:bg-blue-700{% else %}bg-gray-400 cursor-not-allowed{% endif %} text-white px-4 py-2 rounded transition-colors"
-                                                {% if not product.is_available %}disabled{% endif %}>
-                                                {% if product.is_available %}
-                                                    Add to Cart
-                                                {% else %}
-                                                    Out of Stock
+                                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors text-sm">
+                                                Add to Cart
+                                            </button>
+                                            {% else %}
+                                            <button type="submit" 
+                                                class="bg-gray-400 cursor-not-allowed text-white px-4 py-2 rounded text-sm"
+                                                disabled>
+                                                Out of Stock
                                                 {% endif %}
                                             </button>
                                         </form>

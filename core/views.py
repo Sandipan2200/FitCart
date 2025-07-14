@@ -51,16 +51,29 @@ def add_to_cart(request, product_id):
         
         cart = request.session.get('cart', {})
         current_quantity = cart.get(str(product_id), 0)
-        requested_quantity = current_quantity + 1
         
-        # Check if adding one more would exceed available stock
+        # Get requested quantity from form, default to 1 if not provided
+        try:
+            quantity_to_add = int(request.POST.get('quantity', 1))
+            if quantity_to_add < 1:
+                raise ValueError
+        except ValueError:
+            messages.error(request, 'Please enter a valid quantity.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
+            
+        requested_quantity = current_quantity + quantity_to_add
+        
+        # Check if adding would exceed available stock
         if requested_quantity > product.stock:
-            messages.error(request, f'Sorry, only {product.stock} item(s) available in stock.')
+            if current_quantity > 0:
+                messages.error(request, f'You already have {current_quantity} {product.name} in your cart. Cannot add {quantity_to_add} more as only {product.stock} are available.')
+            else:
+                messages.error(request, f'Cannot add {quantity_to_add} items as only {product.stock} {product.name} are available in stock.')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
             
         cart[str(product_id)] = requested_quantity
         request.session['cart'] = cart
-        messages.success(request, f'{product.name} added to cart.')
+        messages.success(request, f'Added {quantity_to_add} {product.name} to cart. Total in cart: {requested_quantity}')
         return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
     return redirect('index')
 
@@ -262,16 +275,31 @@ def place_order(request):
 
 def update_cart(request, product_id):
     if request.method == 'POST':
-        quantity = int(request.POST.get('quantity', 1))
-        cart = request.session.get('cart', {})
-        
-        if quantity > 0:
-            cart[str(product_id)] = quantity
-        else:
-            cart.pop(str(product_id), None)
+        try:
+            product = Product.objects.get(id=product_id)
+            quantity = int(request.POST.get('quantity', 1))
+            cart = request.session.get('cart', {})
             
-        request.session['cart'] = cart
-        messages.success(request, 'Cart updated successfully.')
+            # Validate quantity
+            if quantity <= 0:
+                messages.error(request, 'Please enter a valid quantity.')
+                return redirect('view_cart')
+                
+            # Check stock availability
+            if quantity > product.stock:
+                messages.error(request, f'Cannot update quantity to {quantity} as only {product.stock} {product.name} are available in stock.')
+                return redirect('view_cart')
+            
+            if quantity > 0:
+                cart[str(product_id)] = quantity
+                messages.success(request, f'Updated {product.name} quantity to {quantity}.')
+            else:
+                cart.pop(str(product_id), None)
+                
+            request.session['cart'] = cart
+            messages.success(request, 'Cart updated successfully.')
+        except (Product.DoesNotExist, ValueError):
+            messages.error(request, 'Invalid request.')
         
     return redirect('view_cart')
 

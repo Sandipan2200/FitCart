@@ -22,15 +22,32 @@
                         </div>
                     </div>
                     <div class="flex items-center space-x-4">
-                        <form method="post" action="{% url 'update_cart' item.product.id %}">
+                        <form method="post" action="{% url 'update_cart' item.product.id %}" class="flex items-center space-x-2">
                             {% csrf_token %}
-                            <input type="number" name="quantity" value="{{ item.quantity }}" min="1" max="{{ item.product.stock }}" 
-                                   class="w-16 px-2 py-1 border rounded">
-                            <button type="submit" class="text-blue-600 hover:text-blue-800">Update</button>
+                            <div class="flex flex-col">
+                                <div class="flex items-center border rounded">
+                                    <input type="number" 
+                                           name="quantity" 
+                                           value="{{ item.quantity }}" 
+                                           min="1" 
+                                           max="{{ item.product.stock }}"
+                                           class="w-20 text-center border-none focus:ring-0 text-sm py-2" />
+                                </div>
+                                {% if item.product.stock > 0 %}
+                                <span class="text-xs text-gray-500 mt-1">Max: {{ item.product.stock }} available</span>
+                                {% endif %}
+                            </div>
+                            <button type="submit" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
+                                Update
+                            </button>
                         </form>
                         <form method="post" action="{% url 'remove_from_cart' item.product.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="text-red-600 hover:text-red-800">Remove</button>
+                            <button type="submit" 
+                                    class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm">
+                                Remove
+                            </button>
                         </form>
                     </div>
                 </div>
