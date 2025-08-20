@@ -18,6 +18,55 @@
         </form>
     </div>
 
+    <!-- Recommended Products -->
+    {% if recommended %}
+    <div class="container mx-auto px-4 py-6">
+        <h2 class="text-2xl font-bold mb-4">Recommended Products</h2>
+        <p class="text-gray-600 mb-4">Hand-picked items from local shops near you.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for block in recommended %}
+            <div class="bg-white p-4 rounded-lg shadow-md">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-3">
+                        {% if block.shop.logo %}
+                        <img src="{{ block.shop.logo.url }}" alt="{{ block.shop.shop_name }} logo" class="w-12 h-12 object-cover rounded">
+                        {% else %}
+                        <div class="w-12 h-12 bg-gray-100 rounded flex items-center justify-center text-gray-400">S</div>
+                        {% endif %}
+                        <div>
+                            <h3 class="font-semibold">{{ block.shop.shop_name }}</h3>
+                            <p class="text-xs text-gray-500">{{ block.shop.address|truncatechars:40 }}</p>
+                        </div>
+                    </div>
+                    <a href="{% url 'shop_detail' block.shop.id %}" class="text-blue-600 hover:underline text-sm">View shop</a>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    {% for product in block.products %}
+                    <div class="border rounded p-2 bg-gray-50 hover:shadow-md transition-shadow">
+                        {% if product.image %}
+                        <img src="{{ product.image.url }}" alt="{{ product.name }}" class="w-full h-28 object-cover rounded mb-2">
+                        {% else %}
+                        <div class="w-full h-28 bg-gray-100 rounded mb-2 flex items-center justify-center text-gray-400">No image</div>
+                        {% endif %}
+                        <h4 class="text-sm font-medium">{{ product.name|truncatechars:30 }}</h4>
+                        <div class="flex items-center justify-between mt-1">
+                            <span class="text-green-600 font-semibold">₹{{ product.price }}</span>
+                            <form method="post" action="{% url 'add_to_cart' product.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="bg-blue-600 text-white px-2 py-1 text-xs rounded hover:bg-blue-700">Add</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Main Content -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
         <!-- Shops List -->
@@ -75,7 +124,16 @@
         <!-- Map -->
         <div class="bg-white p-6 rounded-lg shadow-md">
             <h2 class="text-2xl font-bold mb-4">Shops Map</h2>
-            <div id="map" class="w-full h-96 rounded-lg"></div>
+            <div id="map" class="w-full h-96 rounded-lg">
+                {% if not map_allowed %}
+                <div class="flex items-center justify-center h-full">
+                    <div class="text-center">
+                        <p class="font-semibold">Map is hidden</p>
+                        <p class="text-sm text-gray-600">Please <a href="{% url 'login' %}" class="text-blue-600 underline">sign in</a> to view nearby shop locations.</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
         </div>
     </div>
 
@@ -93,6 +151,31 @@
 
 <!-- Google Maps Script -->
 <script>
+// Provide a JSON-safe user location object for JS
+const userLocationData = {{ user_location_json|default:'null'|safe }};
+// Shops payload for map markers (safe JSON string)
+const shopsForMap = {{ shops_for_map_json|default:'[]'|safe }};
+// Whether the server allows map viewing for this user
+const mapAllowed = {{ map_allowed|yesno:"true,false" }};
+// CSS for pulsing user marker (mimic Google Maps user location)
+const pulsingUserMarkerStyle = `
+    .pulsing-user-marker { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+    .pulsing-user-marker .pulsing-ring {
+        width: 40px; height: 40px; border-radius: 50%; background: rgba(66,133,244,0.2); animation: pulse 2s infinite;
+    }
+    .pulsing-user-marker .pulsing-dot {
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 12px; height: 12px; border-radius: 50%; background: #4285F4; box-shadow: 0 0 0 2px rgba(255,255,255,0.85);
+    }
+    @keyframes pulse { 0% { transform: scale(0.6); opacity: 0.8 } 70% { transform: scale(1.6); opacity: 0 } 100% { transform: scale(1.6); opacity: 0 } }
+`;
+
+// Inject styles once
+if (!document.getElementById('pulsing-user-marker-styles')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'pulsing-user-marker-styles';
+    styleEl.appendChild(document.createTextNode(pulsingUserMarkerStyle));
+    document.head.appendChild(styleEl);
+}
 function showLoadingIndicator() {
     document.getElementById('map').innerHTML = 
         '<div class="flex items-center justify-center h-full bg-gray-50">' +
@@ -108,7 +191,7 @@ function showError(message) {
 }
 
 function checkGoogleMapsAPIKey() {
-    const apiKey = '{{ GOOGLE_MAPS_API_KEY }}';
+    const apiKey = "{{ GOOGLE_MAPS_API_KEY|escapejs }}";
     if (!apiKey) {
         showError('Google Maps API key is not configured. Please contact the administrator.');
         return false;
@@ -123,8 +206,8 @@ function initMap() {
     showLoadingIndicator();
     
     try {
-        // Default to a central location if no user location
-        const defaultCenter = {{ user_location|default:"{lat: 20.5937, lng: 78.9629}"|safe }};
+    // Default to a central location if no user location
+    const defaultCenter = userLocationData || { lat: 20.5937, lng: 78.9629 };
         
         const map = new google.maps.Map(document.getElementById('map'), {
             zoom: 13,
@@ -136,39 +219,173 @@ function initMap() {
 
         // Create info window for shop details
         const infoWindow = new google.maps.InfoWindow();
-
-        // Add markers for shops with click listeners
-        {% for shop in shops %}
-            const shopMarker = new google.maps.Marker({
-                position: { lat: {{ shop.latitude }}, lng: {{ shop.longitude }} },
-                map: map,
-                title: "{{ shop.shop_name }}",
-                animation: google.maps.Animation.DROP
-            });
-
-            // Add click listener to show shop info
-            shopMarker.addListener('click', () => {
-                const content = `
-                    <div class="p-2">
-                        <h3 class="font-bold">{{ shop.shop_name }}</h3>
-                        <p class="text-gray-600">{{ shop.address }}</p>
-                        <a href="{% url 'shop_detail' shop.id %}" class="text-blue-600 hover:underline">View Details →</a>
-                    </div>
+        // Helper: create a marker for a shop
+        function createShopMarker(shop) {
+            try {
+                // create a Google-like red pin using an inline SVG data URL
+                const pinSvg = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24">
+                      <path fill="#d23" stroke="#b22222" stroke-width="0.5" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                      <circle cx="12" cy="9" r="3" fill="#fff" stroke="#fff"/>
+                    </svg>
                 `;
-                infoWindow.setContent(content);
-                infoWindow.open(map, shopMarker);
-            });
-        {% endfor %}
+                const pinUrl = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(pinSvg);
 
-        // Add marker for user location if available
-        {% if user_location %}
-            const userMarker = new google.maps.Marker({
-                position: {{ user_location|safe }},
-                map: map,
-                title: "Your Location",
-                icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-                animation: google.maps.Animation.DROP
+                const marker = new google.maps.Marker({
+                    position: { lat: shop.lat, lng: shop.lng },
+                    map: map,
+                    title: shop.name,
+                    animation: google.maps.Animation.DROP,
+                    icon: {
+                        url: pinUrl,
+                        scaledSize: new google.maps.Size(36, 36),
+                        anchor: new google.maps.Point(18, 36)
+                    }
+                });
+
+                marker.addListener('click', () => {
+                    // Build card-style popup similar to the provided attachment
+                    const logoHtml = shop.logo_url ? `<div style="width:48px;height:48px;flex-shrink:0;margin-right:8px;"><img src="${shop.logo_url}" alt="logo" style="width:48px;height:48px;object-fit:cover;border-radius:6px;"/></div>` : '';
+                    const shopHeader = `
+                        <div style="display:flex;align-items:center;margin-bottom:8px;">
+                            ${logoHtml}
+                            <div style="flex:1;">
+                                <div style="font-weight:700;font-size:15px;color:#0f172a;">${escapeHtml(shop.name)}</div>
+                                <div style="font-size:12px;color:#6b7280;">${escapeHtml(shop.address)}</div>
+                            </div>
+                            <div style="margin-left:8px;font-size:13px;"><a href="/shop/${shop.id}/" style="color:#2563eb;text-decoration:none;">View shop</a></div>
+                        </div>
+                    `;
+
+                    // Products grid (up to 2)
+                    let productsHtml = '<div style="display:flex;gap:8px;">';
+                    if (Array.isArray(shop.products) && shop.products.length) {
+                        shop.products.forEach(p => {
+                            const pImg = p.image_url ? `<div style="width:88px;height:72px;border-radius:6px;overflow:hidden;"><img src="${p.image_url}" style="width:100%;height:100%;object-fit:cover;"/></div>` : `<div style="width:88px;height:72px;border-radius:6px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;color:#9ca3af;">No image</div>`;
+                            productsHtml += `
+                                <div style="background:#fff;padding:8px;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,0.04);width:120px;">
+                                    ${pImg}
+                                    <div style="font-size:13px;font-weight:600;color:#0f172a;margin-top:6px;">${escapeHtml(p.name.length>30? p.name.slice(0,27)+'...': p.name)}</div>
+                                    <div style="color:#10b981;font-weight:700;margin-top:4px;">₹${p.price}</div>
+                                    <div style="margin-top:6px;text-align:right;"><button onclick="addToCartFromPopup(${p.id})" style="background:#2563eb;color:#fff;border:none;padding:6px 8px;border-radius:6px;cursor:pointer;">Add</button></div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        productsHtml += '<div style="color:#6b7280;font-size:13px;">No products available</div>';
+                    }
+                    productsHtml += '</div>';
+
+                    const content = `<div style="width:340px;font-family:Inter, Arial, sans-serif;padding:8px;">${shopHeader}${productsHtml}</div>`;
+                    infoWindow.setContent(content);
+                    infoWindow.open(map, marker);
+                });
+                return marker;
+            } catch (e) {
+                console.warn('Failed to create marker for shop', shop, e);
+                return null;
+            }
+        }
+
+        // Basic HTML escaper to avoid breaking info window content
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>\"']/g, function(s) {
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[s];
             });
+        }
+
+        // Add to cart helper used by popup 'Add' buttons
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+
+        function addToCartFromPopup(productId) {
+            const csrftoken = getCookie('csrftoken');
+            fetch(`/add-to-cart/${productId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify({ quantity: 1 })
+            }).then(r => {
+                if (r.ok) return r.json().catch(() => ({}));
+                throw new Error('Network response was not ok');
+            }).then(data => {
+                // show a small toast / alert
+                alert('Added to cart');
+                // Optionally update cart UI here
+            }).catch(err => {
+                console.error('Add to cart failed', err);
+                alert('Failed to add to cart. Please login and try again.');
+            });
+        }
+
+        // Show nearby shops within given radius (meters)
+        function showNearbyShops(center, radiusMeters = 4000) {
+            // add pulsing user overlay (mimic Google Maps blue dot)
+            const userOverlay = (typeof createPulsingUserOverlay === 'function') ? createPulsingUserOverlay(center, map) : null;
+
+            if (!Array.isArray(shopsForMap) || !shopsForMap.length) return;
+
+            const nearby = shopsForMap.filter(s => {
+                try {
+                    const d = google.maps.geometry.spherical.computeDistanceBetween(
+                        new google.maps.LatLng(center.lat, center.lng),
+                        new google.maps.LatLng(s.lat, s.lng)
+                    );
+                    return d <= radiusMeters;
+                } catch (e) {
+                    return false;
+                }
+            });
+
+            if (!nearby.length) {
+                // No nearby shops — show a friendly message inside map
+                map.setCenter(center);
+                map.setZoom(13);
+                const mapEl = document.getElementById('map');
+                mapEl.insertAdjacentHTML('beforeend', '<div class="absolute inset-0 flex items-center justify-center pointer-events-none">\n                    <div class="bg-white bg-opacity-90 p-3 rounded shadow">No shops found within 4 km of your location.</div>\n                </div>');
+                return;
+            }
+
+            // Create markers for nearby shops
+            nearby.forEach(createShopMarker);
+
+            // Adjust map bounds to show all
+            const bounds = new google.maps.LatLngBounds();
+            bounds.extend(new google.maps.LatLng(center.lat, center.lng));
+            nearby.forEach(s => bounds.extend(new google.maps.LatLng(s.lat, s.lng)));
+            map.fitBounds(bounds);
+        }
+
+        // If we already have a server-provided user location, use it; otherwise request browser geolocation for customers
+        if (userLocationData) {
+            showNearbyShops(userLocationData, 4000);
+    } else if (navigator.geolocation && mapAllowed) {
+            // Try to get user's location from browser
+            navigator.geolocation.getCurrentPosition(pos => {
+                const detected = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                showNearbyShops(detected, 4000);
+            }, err => {
+                // If user denies or error, fallback to showing all shops (customer) or default center
+                console.warn('Geolocation failed or denied:', err);
+                // If map is allowed (authenticated customer) but no geolocation, just show all shops with simple markers
+                if (Array.isArray(shopsForMap) && shopsForMap.length) {
+                    shopsForMap.forEach(createShopMarker);
+                }
+            }, { enableHighAccuracy: true, timeout: 8000 });
+        } else {
+            // Not allowed or no geolocation API — show available shops normally
+            if (Array.isArray(shopsForMap) && shopsForMap.length) shopsForMap.forEach(createShopMarker);
+        }
+
+        // Add pulsing overlay for user location if available
+        if (userLocationData) {
+            const userOverlay = (typeof createPulsingUserOverlay === 'function') ? createPulsingUserOverlay(userLocationData, map) : null;
 
             // Add circle to show approximate coverage area
             new google.maps.Circle({
@@ -178,10 +395,10 @@ function initMap() {
                 fillColor: "#4299E1",
                 fillOpacity: 0.1,
                 map: map,
-                center: {{ user_location|safe }},
+                center: userLocationData,
                 radius: 3000  // 3km radius
             });
-        {% endif %}
+        }
 
     } catch (error) {
         console.error('Error initializing map:', error);
@@ -190,6 +407,51 @@ function initMap() {
             'Error loading map. Please check your internet connection and try again.' +
             '</div>';
     }
+}
+</script>
+
+<script>
+// Helper: create a pulsing user overlay (mimics Google Maps blue dot)
+function createPulsingUserOverlay(latlng, map) {
+    if (!google || !google.maps || !google.maps.OverlayView) return null;
+
+    function Overlay(position, mapInstance) {
+        this.position = position;
+        this.map = mapInstance;
+        this.div = null;
+        this.setMap(mapInstance);
+    }
+    Overlay.prototype = new google.maps.OverlayView();
+
+    Overlay.prototype.onAdd = function() {
+        this.div = document.createElement('div');
+        this.div.className = 'pulsing-user-marker';
+        this.div.innerHTML = '<div class="pulsing-ring"></div><div class="pulsing-dot"></div>';
+        const panes = this.getPanes();
+        panes.overlayMouseTarget.appendChild(this.div);
+    };
+
+    Overlay.prototype.draw = function() {
+        if (!this.div) return;
+        const point = this.getProjection().fromLatLngToDivPixel(new google.maps.LatLng(this.position.lat, this.position.lng));
+        if (point) {
+            this.div.style.left = point.x + 'px';
+            this.div.style.top = point.y + 'px';
+        }
+    };
+
+    Overlay.prototype.onRemove = function() {
+        if (this.div && this.div.parentNode) this.div.parentNode.removeChild(this.div);
+        this.div = null;
+    };
+
+    Overlay.prototype.setPosition = function(position) {
+        this.position = position;
+        this.draw();
+    };
+
+    const overlay = new Overlay(latlng, map);
+    return overlay;
 }
 </script>
 
@@ -235,8 +497,27 @@ window.gm_authFailure = function() {
 </div>
 {% endif %}
 
+{% if GOOGLE_MAPS_API_KEY and map_allowed %}
 <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places&callback=initMap"
+    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY|urlencode }}&libraries=places,geometry&callback=initMap"
     onerror="handleScriptError()">
 </script>
+{% elif not map_allowed %}
+<script>
+    // map not allowed: show message inside map container
+    document.addEventListener('DOMContentLoaded', function(){
+        const mapEl = document.getElementById('map');
+        if (mapEl && mapEl.innerHTML.trim() === '') {
+            mapEl.innerHTML = '<div class="p-4 text-gray-600">Please sign in to view the map.</div>';
+        }
+    });
+</script>
+{% else %}
+<script>
+    // API key missing
+    document.addEventListener('DOMContentLoaded', function(){
+        showError('Google Maps API key is not configured. Please contact the administrator.');
+    });
+</script>
+{% endif %}
 {% endblock %}

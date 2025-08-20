@@ -91,9 +91,9 @@
 
             <!-- Map Section -->
             <div class="bg-white p-8 rounded-lg shadow-md">
-                <h3 class="text-lg font-semibold mb-4">Select Your Location</h3>
+                <h3 class="text-lg font-semibold mb-4">Location (auto-detected)</h3>
                 <div id="map" class="w-full h-[400px] rounded-lg"></div>
-                <p class="mt-2 text-sm text-gray-600">Drag the marker to set your exact location</p>
+                <p class="mt-2 text-sm text-gray-600">We will detect your approximate location automatically for delivery and nearby shops; you can edit it later from your profile.</p>
             </div>
         </div>
     </div>
@@ -102,17 +102,14 @@
 <!-- Add Google Maps JavaScript for location picking -->
 <script>
 function initMap() {
+    // Initialize a neutral map view. We won't place a user marker here to avoid revealing precise location on registration.
+    const defaultCenter = { lat: 20.5937, lng: 78.9629 };
     const map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 13,
-        center: { lat: -34.397, lng: 150.644 }
+        zoom: 5,
+        center: defaultCenter
     });
 
-    const marker = new google.maps.Marker({
-        map: map,
-        draggable: true
-    });
-
-    // Try HTML5 geolocation
+    // Try HTML5 geolocation and auto-fill hidden fields without placing a marker
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -120,24 +117,21 @@ function initMap() {
                     lat: position.coords.latitude,
                     lng: position.coords.longitude,
                 };
-                map.setCenter(pos);
-                marker.setPosition(pos);
-                document.getElementById('id_latitude').value = pos.lat;
-                document.getElementById('id_longitude').value = pos.lng;
+                // Fill hidden form fields so the server receives the coordinates
+                const latInput = document.getElementById('id_latitude');
+                const lngInput = document.getElementById('id_longitude');
+                if (latInput) latInput.value = pos.lat;
+                if (lngInput) lngInput.value = pos.lng;
+                // Do not center the map or add a user marker here to avoid showing precise location on registration.
             },
             () => {
                 handleLocationError(true, map.getCenter());
-            }
+            },
+            { enableHighAccuracy: false, timeout: 8000 }
         );
     } else {
         handleLocationError(false, map.getCenter());
     }
-
-    marker.addListener('dragend', () => {
-        const pos = marker.getPosition();
-        document.getElementById('id_latitude').value = pos.lat();
-        document.getElementById('id_longitude').value = pos.lng();
-    });
 }
 
 function handleLocationError(browserHasGeolocation, pos) {
@@ -146,7 +140,13 @@ function handleLocationError(browserHasGeolocation, pos) {
         'Error: Your browser doesn\'t support geolocation.');
 }
 </script>
+{% if GOOGLE_MAPS_API_KEY %}
 <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&callback=initMap">
+    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY|urlencode }}&callback=initMap">
 </script>
+{% else %}
+<script>
+    console.warn('Google Maps API key is not configured; location auto-detection on registration will be limited.');
+</script>
+{% endif %}
 {% endblock %}

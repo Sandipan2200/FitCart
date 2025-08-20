@@ -237,10 +237,14 @@ function handleScriptError() {
         '</div>';
 }
 </script>
+{% if GOOGLE_MAPS_API_KEY %}
 <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places&callback=initMap"
+    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY|urlencode }}&libraries=places&callback=initMap"
     onerror="handleScriptError()">
 </script>
+{% else %}
+<script>console.warn('Google Maps API key is not configured; shop registration map will be limited.');</script>
+{% endif %}
 <script>
     // Add fallback error handler for the entire window
     window.gm_authFailure = function() {

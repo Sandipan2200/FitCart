@@ -31,7 +31,11 @@
 </div>
 
 <!-- Google Maps JavaScript -->
-<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&callback=initMap" async defer></script>
+{% if GOOGLE_MAPS_API_KEY %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY|urlencode }}&callback=initMap" async defer></script>
+{% else %}
+<script>console.warn('Google Maps API key missing; map features limited on search results.');</script>
+{% endif %}
 <script>
     let map;
     let userLocation;
@@ -69,8 +73,8 @@
                             {
                                 id: {{ shop.id }},
                                 name: "{{ shop.shop_name }}",
-                                lat: {{ shop.latitude }},
-                                lng: {{ shop.longitude }}
+                                lat: {{ shop.latitude|default:'null' }},
+                                lng: {{ shop.longitude|default:'null' }}
                             },
                         {% endfor %}
                     ];

@@ -5,43 +5,64 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <!-- Shop Information -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div class="flex justify-between items-start">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-900">{{ shop.shop_name }}</h1>
-                <div class="flex items-center mt-2">
-                    <div class="flex items-center">
-                        {% with avg_rating=shop.reviews.all|dictsort:"rating"|last %}
-                        {% for i in "12345" %}
-                        <svg class="w-5 h-5 {% if i|add:'0' <= avg_rating %}text-yellow-400{% else %}text-gray-300{% endif %}" 
-                            fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                        </svg>
-                        {% endfor %}
-                        {% endwith %}
-                        <span class="ml-2 text-sm text-gray-600">({{ shop.reviews.count }} reviews)</span>
-                    </div>
-                    {% if user.is_authenticated and not user.shopkeeper %}
-                    <a href="{% url 'review_shop' shop.id %}" class="ml-4 text-blue-600 hover:text-blue-800 text-sm">
-                        Write a Review
-                    </a>
-                    {% endif %}
+    <!-- Shop Information (Hero header with image + logo) -->
+    <div class="bg-white rounded-lg shadow-md overflow-hidden mb-8">
+        <div class="md:flex">
+            <!-- Left: Shop image -->
+            <div class="md:w-1/3 relative bg-gray-100">
+                {% if shop.shop_image %}
+                <img src="{{ shop.shop_image.url }}" alt="{{ shop.shop_name }} image" class="w-full h-56 md:h-full object-cover">
+                {% else %}
+                <div class="w-full h-56 md:h-full bg-gradient-to-br from-gray-100 to-gray-50 flex items-center justify-center">
+                    <div class="text-gray-400">No shop image</div>
                 </div>
-                <p class="text-gray-600 mt-2">{{ shop.address }}</p>
-                {% if shop.phone %}
-                    <p class="text-gray-600">
-                        <span class="font-medium">Contact:</span> {{ shop.phone }}
-                    </p>
+                {% endif %}
+
+                <!-- Shop logo overlay -->
+                {% if shop.logo %}
+                <div class="absolute left-4 top-4 bg-white rounded-lg p-1 shadow-md" style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;">
+                    <img src="{{ shop.logo.url }}" alt="{{ shop.shop_name }} logo" class="w-12 h-12 object-cover rounded">
+                </div>
                 {% endif %}
             </div>
-            {% if user_location %}
-                <div class="text-right">
-                    <p class="text-sm text-blue-600">
-                        Distance: {{ distance|floatformat:2 }} km
-                    </p>
+
+            <!-- Right: Details -->
+            <div class="md:flex-1 p-6">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900">{{ shop.shop_name }}</h1>
+                        <p class="text-sm text-gray-500 mt-1">{{ shop.address }}</p>
+
+                        <div class="flex items-center gap-4 mt-3">
+                            <div class="flex items-center">
+                                {% with avg_rating=shop.reviews.all|dictsort:"rating"|last %}
+                                {% for i in "12345" %}
+                                <svg class="w-5 h-5 {% if i|add:'0' <= avg_rating %}text-yellow-400{% else %}text-gray-300{% endif %}" 
+                                    fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                </svg>
+                                {% endfor %}
+                                {% endwith %}
+                                <span class="ml-2 text-sm text-gray-600">({{ shop.reviews.count }} reviews)</span>
+                            </div>
+
+                            {% if shop.phone %}
+                                <a href="tel:{{ shop.phone }}" class="text-sm text-gray-600">{{ shop.phone }}</a>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="text-right">
+                        {% if user_location %}
+                        <p class="text-sm text-blue-600">Distance: {{ distance|floatformat:2 }} km</p>
+                        {% endif %}
+                        <div class="mt-4 flex items-center justify-end gap-3">
+                            <a href="{% url 'shop_detail' shop.id %}" class="px-3 py-2 bg-white border rounded text-sm text-gray-700">Overview</a>
+                            <a href="#products" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">View Products</a>
+                        </div>
+                    </div>
                 </div>
-            {% endif %}
+            </div>
         </div>
     </div>
 
@@ -64,7 +85,7 @@
     </div>
 
     <!-- Products Grid -->
-    <div class="mb-8">
+    <div class="mb-8"  id="products">
         <h2 class="text-2xl font-bold mb-6">All Products</h2>
         {% if products %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -128,16 +149,26 @@
     <!-- Shop Location Map -->
     <div class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-2xl font-bold mb-4">Shop Location</h2>
-        <div id="map" class="w-full h-[400px] rounded-lg"></div>
+        <div id="map" class="w-full h-[400px] rounded-lg">
+            {% if not user.is_authenticated %}
+            <div class="flex items-center justify-center h-full">
+                <div class="text-center">
+                    <p class="font-semibold">Map is hidden</p>
+                    <p class="text-sm text-gray-600">Please <a href="{% url 'login' %}" class="text-blue-600 underline">sign in</a> to view this shop's location.</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
 <!-- Google Maps Script -->
+{% if user.is_authenticated %}
 <script>
 function initMap() {
     const shopLocation = { 
-        lat: {{ shop.latitude }}, 
-        lng: {{ shop.longitude }} 
+        lat: {{ shop.latitude|default:'null' }}, 
+        lng: {{ shop.longitude|default:'null' }} 
     };
 
     const map = new google.maps.Map(document.getElementById('map'), {
@@ -175,17 +206,81 @@ function initMap() {
 
     // Add user location marker if available
     {% if user_location %}
-        const userLocation = {{ user_location|safe }};
-        new google.maps.Marker({
-            position: userLocation,
-            map: map,
-            title: "Your Location",
-            icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
-        });
+        const userLocation = {{ user_location|default:'null'|safe }};
+        if (userLocation) {
+            new google.maps.Marker({
+                position: userLocation,
+                map: map,
+                title: "Your Location",
+                icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+            });
+        }
     {% endif %}
 }
 </script>
+{% if GOOGLE_MAPS_API_KEY %}
 <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&callback=initMap">
+    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY|urlencode }}&callback=initMap">
+</script>
+{% else %}
+<script>
+    document.addEventListener('DOMContentLoaded', function(){
+        const mapEl = document.getElementById('map');
+        if (mapEl) {
+            mapEl.innerHTML = '<div class="p-4 text-red-600">Google Maps API key is not configured. Please contact the administrator.</div>';
+        }
+    });
+</script>
+{% endif %}
+{% endif %}
+
+<!-- Smooth slow scroll to products section when "View Products" is clicked -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const links = document.querySelectorAll('a[href="#products"]');
+    if (!links || links.length === 0) return;
+
+    // Easing function (cubic) for a smooth feel
+    function easeInOutCubic(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    // Smooth scroll implementation with adjustable duration (ms)
+    function smoothScrollTo(targetY, duration) {
+        const startY = window.pageYOffset;
+        const diff = targetY - startY;
+        let startTime = null;
+
+        function step(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = easeInOutCubic(progress);
+            window.scrollTo(0, Math.round(startY + diff * eased));
+            if (elapsed < duration) {
+                requestAnimationFrame(step);
+            } else {
+                // Replace the hash without jumping again
+                try { history.replaceState(null, '', '#products'); } catch (e) { /* ignore */ }
+            }
+        }
+
+        requestAnimationFrame(step);
+    }
+
+    links.forEach(link => {
+        link.addEventListener('click', function (e) {
+            // Prevent default instantaneous jump
+            e.preventDefault();
+            const target = document.getElementById('products');
+            if (!target) return;
+            // Calculate target Y position with a small top offset
+            const rect = target.getBoundingClientRect();
+            const targetY = rect.top + window.pageYOffset - 16;
+            // Use a slower duration for a pronounced slow animation (1200ms)
+            smoothScrollTo(targetY, 1200);
+        });
+    });
+});
 </script>
 {% endblock %}

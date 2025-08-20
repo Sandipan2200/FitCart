@@ -115,7 +115,8 @@
 </div>
 
 {% if order.status != 'Completed' and order.status != 'Cancelled' %}
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}"></script>
+{% if google_maps_api_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key|urlencode }}"></script>
 <script>
 let map;
 let directionsService;
@@ -127,8 +128,8 @@ let geocoder;
 function initMap() {
     geocoder = new google.maps.Geocoder();
     const shopLocation = { 
-        lat: {{ order.product.shopkeeper.latitude }}, 
-        lng: {{ order.product.shopkeeper.longitude }} 
+        lat: {{ order.product.shopkeeper.latitude|default:'null' }}, 
+        lng: {{ order.product.shopkeeper.longitude|default:'null' }} 
     };
 
     map = new google.maps.Map(document.getElementById('map'), {
@@ -159,10 +160,10 @@ function initMap() {
             
             navigator.geolocation.getCurrentPosition(
                 position => {
-                    const userLocation = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
+                            const userLocation = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
 
                     // Start continuous tracking
                     watchId = navigator.geolocation.watchPosition(
@@ -221,8 +222,8 @@ function updateLocation(position) {
         {
             origin: userLocation,
             destination: { 
-                lat: {{ order.product.shopkeeper.latitude }}, 
-                lng: {{ order.product.shopkeeper.longitude }} 
+                lat: {{ order.product.shopkeeper.latitude|default:'null' }}, 
+                lng: {{ order.product.shopkeeper.longitude|default:'null' }} 
             },
             travelMode: google.maps.TravelMode.DRIVING
         },
@@ -268,5 +269,15 @@ function updateLocation(position) {
 // Initialize map when page loads
 initMap();
 </script>
+{% else %}
+<script>
+    document.addEventListener('DOMContentLoaded', function(){
+        const mapEl = document.getElementById('map');
+        if (mapEl) {
+            mapEl.innerHTML = '<div class="p-4 text-red-600">Google Maps API key is not configured. Please contact the administrator.</div>';
+        }
+    });
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}

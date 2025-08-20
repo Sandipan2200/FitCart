@@ -96,7 +96,11 @@
 </div>
 
 {% if cart_items %}
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}"></script>
+{% if google_maps_api_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key|urlencode }}"></script>
+{% else %}
+<script>console.warn('Google Maps API key missing; navigation features in cart are limited.');</script>
+{% endif %}
 <script>
 let map;
 let directionsService;
@@ -118,7 +122,7 @@ function initMap() {
     
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
-        center: { lat: {{ shop_location.lat }}, lng: {{ shop_location.lng }} },
+    center: { lat: {{ shop_location.lat|default:'0' }}, lng: {{ shop_location.lng|default:'0' }} },
         styles: [
             {
                 featureType: "poi",
@@ -130,7 +134,7 @@ function initMap() {
     
     // Create shop marker
     const shopMarker = new google.maps.Marker({
-        position: { lat: {{ shop_location.lat }}, lng: {{ shop_location.lng }} },
+        position: { lat: {{ shop_location.lat|default:'0' }}, lng: {{ shop_location.lng|default:'0' }} },
         map: map,
         title: 'Shop Location',
         icon: {
@@ -295,10 +299,10 @@ document.getElementById('showDirectionsBtn').addEventListener('click', function(
         
         // Set destination and order information
         currentRoute = {
-            destination: {
-                lat: {{ shop_location.lat }},
-                lng: {{ shop_location.lng }}
-            },
+                destination: {
+                    lat: {{ shop_location.lat|default:'0' }},
+                    lng: {{ shop_location.lng|default:'0' }}
+                },
             orderId: {{ current_order.id|default:"null" }}
         };
         

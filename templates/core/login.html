@@ -15,5 +15,135 @@
         </div>
         <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Login</button>
     </form>
+    <!-- Map preview for login: shows and tracks user's location -->
+    <div class="mt-6">
+        <h3 class="text-lg font-medium mb-2">Location preview</h3>
+        <div id="login-map" class="w-full h-64 rounded-lg bg-gray-100 overflow-hidden">
+            <div id="login-map-message" class="h-full w-full flex items-center justify-center text-gray-600">
+                Waiting for location permission...
+            </div>
+        </div>
+    </div>
 </div>
+
+{% if GOOGLE_MAPS_API_KEY %}
+<script>
+// Login page map: initialize map and start geolocation watch to track user location
+let loginMap;
+let loginMarker;
+let loginAccuracyCircle;
+let loginWatchId = null;
+
+function updateLoginMessage(msg) {
+    const el = document.getElementById('login-map-message');
+    if (!el) return;
+    el.textContent = msg;
+}
+
+function initLoginMap() {
+    try {
+        const defaultCenter = { lat: 20.5937, lng: 78.9629 };
+        const mapEl = document.getElementById('login-map');
+        // Remove any placeholder message
+        const msgEl = document.getElementById('login-map-message');
+        if (msgEl) msgEl.style.display = 'none';
+
+        loginMap = new google.maps.Map(mapEl, {
+            center: defaultCenter,
+            zoom: 4,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false
+        });
+
+        // Start watching user's location
+        if (navigator.geolocation) {
+            updateLoginMessage('Requesting location access...');
+            loginWatchId = navigator.geolocation.watchPosition(
+                pos => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    const accuracy = pos.coords.accuracy || 0;
+
+                    const latLng = { lat: lat, lng: lng };
+                    if (!loginMarker) {
+                        loginMarker = new google.maps.Marker({
+                            position: latLng,
+                            map: loginMap,
+                            title: 'Your location',
+                            icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                        });
+                    } else {
+                        loginMarker.setPosition(latLng);
+                    }
+
+                    if (!loginAccuracyCircle) {
+                        loginAccuracyCircle = new google.maps.Circle({
+                            strokeColor: '#4285F4',
+                            strokeOpacity: 0.6,
+                            strokeWeight: 1,
+                            fillColor: '#4285F4',
+                            fillOpacity: 0.15,
+                            map: loginMap,
+                            center: latLng,
+                            radius: accuracy
+                        });
+                    } else {
+                        loginAccuracyCircle.setCenter(latLng);
+                        loginAccuracyCircle.setRadius(accuracy);
+                    }
+
+                    // center or pan smoothly depending on zoom
+                    if (loginMap.getZoom() < 13) loginMap.setZoom(13);
+                    loginMap.panTo(latLng);
+                },
+                err => {
+                    console.warn('Geolocation watch error:', err);
+                    if (err.code === err.PERMISSION_DENIED) {
+                        updateLoginMessage('Location permission denied. Map preview disabled.');
+                    } else {
+                        updateLoginMessage('Unable to determine location.');
+                    }
+                },
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            );
+        } else {
+            updateLoginMessage('Geolocation is not supported by your browser.');
+        }
+    } catch (e) {
+        console.error('Failed to initialize login map', e);
+        updateLoginMessage('Error initializing map.');
+    }
+}
+
+// Clean up watch on page unload
+window.addEventListener('beforeunload', () => {
+    if (loginWatchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(loginWatchId);
+    }
+});
+// Stop tracking when login form is submitted
+document.addEventListener('DOMContentLoaded', function(){
+    const form = document.querySelector('.max-w-md form') || document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', () => {
+            if (loginWatchId !== null && navigator.geolocation) {
+                navigator.geolocation.clearWatch(loginWatchId);
+                loginWatchId = null;
+            }
+        });
+    }
+});
+</script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY|urlencode }}&callback=initLoginMap" onerror="(function(){const el=document.getElementById('login-map-message'); if(el){el.style.display='flex'; el.textContent='Failed to load Google Maps.'}})()"></script>
+{% else %}
+<script>
+    // No API key: show a friendly message in the preview
+    document.addEventListener('DOMContentLoaded', function(){
+        const el = document.getElementById('login-map-message');
+        if (el) el.textContent = 'Map preview unavailable (API key not configured).';
+    });
+    console.warn('Google Maps API key is not configured; login map preview disabled.');
+</script>
+{% endif %}
 {% endblock %}

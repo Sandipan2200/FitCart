@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate, logout, update_session_auth_hash
 from django.contrib import messages
 from django.conf import settings
+import json
 from django.contrib.auth.forms import PasswordChangeForm
 from .forms import (
     ShopkeeperRegistrationForm, 
@@ -14,6 +15,7 @@ from .forms import (
 )
 from .models import Shopkeeper, Product, Order, Customer, Review
 from .models import Shopkeeper, Product, Order, Customer
+from django.db.models import Prefetch
 from math import radians, sin, cos, sqrt, atan2
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
@@ -624,7 +626,11 @@ from django.conf import settings
 
 def index(request):
     # Get all shops with products in stock
-    shops = Shopkeeper.objects.filter(products__stock__gt=0).distinct()
+    # Prefetch in-stock products for each shop so we can show "recommended" items without extra queries
+    in_stock_products = Product.objects.filter(stock__gt=0).order_by('-id')
+    shops = Shopkeeper.objects.filter(products__stock__gt=0).distinct().prefetch_related(
+        Prefetch('products', queryset=in_stock_products, to_attr='in_stock_products')
+    )
     
     # Get user's location (if logged in and is a customer)
     user_location = None
@@ -638,17 +644,87 @@ def index(request):
         except Customer.DoesNotExist:
             pass
 
+    # Provide a JSON-safe string for templates that inject the location into JS
+    user_location_json = json.dumps(user_location) if user_location else None
+
     # Prepare context with API key and debug info
     context = {
         'shops': shops,
-        'user_location': user_location,
+    'user_location': user_location,
+    'user_location_json': user_location_json,
         'GOOGLE_MAPS_API_KEY': settings.GOOGLE_MAPS_API_KEY,
         'debug': settings.DEBUG
     }
 
+    # Build a lightweight list of recommended products per shop (max 3 each) for the homepage
+    recommended = []
+    for shop in shops:
+        # use the prefetched attribute if available, otherwise fallback to a query
+        products_qs = getattr(shop, 'in_stock_products', None)
+        if products_qs is None:
+            products_qs = shop.products.filter(stock__gt=0).order_by('-id')
+        # pick up to 3 products per shop
+        recommended.append({
+            'shop': shop,
+            'products': products_qs[:3]
+        })
+
+    context['recommended'] = recommended
+
     # Warn if API key is not set
     if not settings.GOOGLE_MAPS_API_KEY:
         messages.warning(request, 'Google Maps API key is not configured. Map features may not work properly.')
+
+    # Determine whether the current user is allowed to view multi-shop maps
+    map_allowed = False
+    shops_for_map = []
+    # Only authenticated users can view the multi-shop map on the index page
+    if request.user.is_authenticated:
+        map_allowed = True
+        # If the user is a shopkeeper, show only their shop on the map
+        try:
+            shopkeeper_profile = Shopkeeper.objects.get(user=request.user)
+            # Only include their own shop if it has coordinates
+            if shopkeeper_profile.latitude and shopkeeper_profile.longitude:
+                shops_for_map = [shopkeeper_profile]
+        except Shopkeeper.DoesNotExist:
+            # For customers, include all shops that have coordinates
+            shops_for_map = [shop for shop in shops if getattr(shop, 'latitude', None) and getattr(shop, 'longitude', None)]
+
+    context['shops_for_map'] = shops_for_map
+    context['map_allowed'] = map_allowed
+
+    # Create a small JSON-safe payload for maps (avoid sending model instances into templates)
+    shops_map_payload = []
+    if map_allowed:
+        for s in shops_for_map:
+            try:
+                # include up to 2 sample products for the popup preview
+                products_list = []
+                products_qs = getattr(s, 'in_stock_products', None)
+                if products_qs is None:
+                    products_qs = s.products.filter(stock__gt=0).order_by('-id')
+                for p in products_qs[:2]:
+                    products_list.append({
+                        'id': p.id,
+                        'name': p.name,
+                        'price': float(p.price) if p.price is not None else None,
+                        'image_url': p.image.url if getattr(p, 'image', None) else None,
+                    })
+
+                shops_map_payload.append({
+                    'id': s.id,
+                    'name': s.shop_name,
+                    'address': s.address,
+                    'lat': float(s.latitude),
+                    'lng': float(s.longitude),
+                    'logo_url': s.logo.url if getattr(s, 'logo', None) else None,
+                    'image_url': s.shop_image.url if getattr(s, 'shop_image', None) else None,
+                    'products': products_list,
+                })
+            except Exception:
+                continue
+    context['shops_for_map_json'] = json.dumps(shops_map_payload)
 
     return render(request, 'core/index.html', context)
 
@@ -660,7 +736,7 @@ def search_products(request):
         return render(request, 'core/search_results.html', {
             'shops': shops,
             'query': query,
-            'GOOGLE_MAPS_API_KEY': 'YOUR_GOOGLE_MAPS_API_KEY'  # Replace with your API key
+            'GOOGLE_MAPS_API_KEY': settings.GOOGLE_MAPS_API_KEY
         })
     return redirect('index')
 
@@ -737,5 +813,5 @@ def shopkeeper_profile(request):
     return render(request, 'core/shopkeeper_profile.html', {
         'form': form,
         'shopkeeper': shopkeeper,
-        'GOOGLE_MAPS_API_KEY': 'YOUR_GOOGLE_MAPS_API_KEY'  # Replace with your API key
+    'GOOGLE_MAPS_API_KEY': settings.GOOGLE_MAPS_API_KEY
     })

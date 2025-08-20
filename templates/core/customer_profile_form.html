@@ -96,12 +96,13 @@
 </div>
 
 {% if form.instance.latitude and form.instance.longitude %}
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}"></script>
+{% if google_maps_api_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key|urlencode }}"></script>
 <script>
 function initMap() {
     const customerLocation = {
-        lat: {{ form.instance.latitude }},
-        lng: {{ form.instance.longitude }}
+        lat: {{ form.instance.latitude|default:'null' }},
+        lng: {{ form.instance.longitude|default:'null' }}
     };
 
     const map = new google.maps.Map(document.getElementById('map'), {
@@ -118,5 +119,15 @@ function initMap() {
 
 initMap();
 </script>
+{% else %}
+<script>
+    document.addEventListener('DOMContentLoaded', function(){
+        const mapEl = document.getElementById('map');
+        if (mapEl) {
+            mapEl.innerHTML = '<div class="p-4 text-red-600">Google Maps API key is not configured. Please contact the administrator.</div>';
+        }
+    });
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}
